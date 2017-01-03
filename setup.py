@@ -1,10 +1,27 @@
 #!/usr/bin/env python
 # encoding: utf-8
-import aiofile as module
 from setuptools import setup, Extension
 from sys import platform
 
+
+package_info = "Asynchronous file operations"
+version_info = (0, 1, 0)
+
+
+author_info = (
+    ('Dmitry Orlov', 'me@mosquito.su'),
+)
+
+author_email = ", ".join("{}".format(info[1]) for info in author_info)
+
+license = "Apache 2"
+
+__version__ = ".".join(str(x) for x in version_info)
+__author__ = ", ".join("{} <{}>".format(*info) for info in author_info)
+
+
 libraries = []
+
 
 if platform == 'linux':
     libraries.append('rt')
@@ -34,22 +51,22 @@ else:
 
 
 setup(
-    name=module.__name__,
+    name='aiofile',
     ext_modules=extensions,
-    version=module.__version__,
+    version=__version__,
     packages=[
         'aiofile',
     ],
     package_data={
         'aiofile': ['_aio.pyi']
     },
-    license=module.license,
-    description=module.package_info,
+    license=license,
+    description=package_info,
     long_description=open("README.rst").read(),
     platforms=["POSIX"],
     url='http://github.com/mosquito/aiofile',
-    author=module.__author__,
-    author_email=module.author_email,
+    author=__author__,
+    author_email=author_email,
     provides=["aiofile"],
     build_requires=['cython'],
     keywords="aio, python, asyncio, cython",
