@@ -9,5 +9,6 @@ install:
   - pip install -U cython pytest pytest-cov pytest-asyncio
   - pip install -Ue .
 script:
+  - python -c "import sys; print(sys.platform)"
   - py.test --cov=aiofile tests
   - pip uninstall -y .
