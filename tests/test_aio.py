@@ -93,18 +93,19 @@ def test_reader_writer(temp_file, uuid):
     assert count == 100
 
 
-@pytest.mark.skipif(PY35, reason="requires python3.5")
-@pytest.mark.asyncio
-async def test_reader_writer(loop, temp_file, uuid):
-    r_file = AIOFile(temp_file, 'r')
-    w_file = AIOFile(temp_file, 'w')
+if PY35:
+    @pytest.mark.skipif(PY35, reason="requires python3.5")
+    @pytest.mark.asyncio
+    async def test_reader_writer(loop, temp_file, uuid):
+        r_file = AIOFile(temp_file, 'r')
+        w_file = AIOFile(temp_file, 'w')
 
-    writer = Writer(w_file)
+        writer = Writer(w_file)
 
-    for _ in range(100):
-        await writer(uuid)
+        for _ in range(100):
+            await writer(uuid)
 
-    await w_file.flush()
+        await w_file.flush()
 
-    async for chunk in Reader(r_file, chunk_size=len(uuid)):
-        assert chunk.decode() == uuid
+        async for chunk in Reader(r_file, chunk_size=len(uuid)):
+            assert chunk.decode() == uuid
