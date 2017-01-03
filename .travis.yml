@@ -7,5 +7,7 @@ python:
   - 'nightly'
 install:
   - pip install -U cython pytest pytest-cov pytest-asyncio
+  - pip install -Ue .
 script:
   - py.test --cov=aiofile tests
+  - pip uninstall -y .
