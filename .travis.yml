@@ -6,7 +6,6 @@ python:
   - '3.6-dev'
   - 'nightly'
 install:
-  - python -c "import sys; print(sys.platform)"
   - pip install -U cython pytest pytest-cov pytest-asyncio
   - pip install -Ue .
 script:
