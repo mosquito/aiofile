@@ -1,0 +1,11 @@
+language: python
+cache: pip
+python:
+  - '3.4'
+  - '3.5'
+  - '3.6-dev'
+  - 'nightly'
+install:
+  - pip install -U cython pytest pytest-cov pytest-asyncio
+script:
+  - py.test --cov=aiofile tests

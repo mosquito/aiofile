@@ -1,0 +1,6 @@
+recursive-exclude tests *
+recursive-exclude systemd *.pyc
+recursive-exclude __pycache__ *
+recursive-include aiofile *.pyx *.pxd *.pyi
+exclude .*
+include README.md

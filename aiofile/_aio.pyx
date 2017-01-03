@@ -1,21 +1,57 @@
-# %%cython -a -lrt
 from libc.errno cimport *
 from libc.stdlib cimport calloc, free
 from libc.string cimport memcpy, strerror
 from posix.unistd cimport close as cclose
 from posix.fcntl cimport open as copen, O_RDWR, O_APPEND, O_CREAT, O_RDONLY, O_SYNC
-from posix.signal cimport SIGEV_NONE
-from posix.types cimport int
+from posix.signal cimport sigevent, SIGEV_NONE
+from posix.types cimport off_t
 from posix.stat cimport fstat, struct_stat
-from cpython cimport object, bytes, bool, str
-from aio cimport aio_read, aio_write, aio_fsync
+from cpython cimport object, bytes, bool
+# from posix.time cimport timespec
 
 
 class LimitationError(Exception):
     pass
 
 
-def _handle_cerrors():
+cdef extern from *:
+     ctypedef int vvoid "volatile void"
+
+cdef extern from "<aio.h>" nogil:
+
+    # The order of these fields is implementation-dependent
+    cdef struct aiocb:
+        int             aio_fildes     # File descriptor
+        off_t           aio_offset     # File offset
+        vvoid           *aio_buf       # Location of buffer
+        size_t          aio_nbytes     # Length of transfer
+        int             aio_reqprio    # Request priority
+        sigevent        aio_sigevent   # Notification method
+        int             aio_lio_opcode # Operation to be performed; lio_listio() only
+
+        # Various implementation-internal fields not shown
+
+    enum:
+        LIO_READ,
+        LIO_WRITE,
+        LIO_NOP
+
+    cdef int aio_read(aiocb *aiocbp)
+    cdef int aio_write(aiocb *aiocbp)
+    cdef int aio_fsync(int op, aiocb *aiocbp)
+    cdef int aio_error(const aiocb *aiocbp)
+    cdef ssize_t aio_return(aiocb *aiocbp)
+    # cdef int aio_suspend(const aiocb * const aiocb_list[], int nitems, const timespec *timeout)
+    # cdef int aio_cancel(int fd, aiocb *aiocbp)
+    # cdef int lio_listio(int mode, aiocb *const aiocb_list[], int nitems, sigevent *sevp)
+
+
+IO_READ = LIO_READ
+IO_WRITE = LIO_WRITE
+IO_NOP = LIO_NOP
+
+
+def _handle_errno():
     if errno == EAGAIN:
         raise LimitationError("Resource limitaion")
     elif errno == ENOSYS:
@@ -76,7 +112,7 @@ cdef class AIOFile:
         else:
             raise ValueError("Data must be str or bytes")
 
-        op = AIOOperation(LIO_READ, self, offset, len(data), priority)
+        op = AIOOperation(LIO_WRITE, self, offset, len(data), priority)
         op.buffer = bytes_data
         return op
 
@@ -85,12 +121,12 @@ cdef class AIOFile:
 
 
 cdef class AIOOperation:
-    cdef aiocb* _cb
-    cdef unsigned int _buffer_size
+    cdef aiocb* cb
+    cdef unsigned int buffer_size
     cdef bool _closed
     cdef int _state
     cdef object _result
-    cdef bool _is_running
+    cdef bool is_running
 
     def __init__(self, int state, AIOFile aio_file, unsigned int offset, int nbytes, int reqprio):
 
@@ -107,59 +143,59 @@ cdef class AIOOperation:
             buffer_size = 0
 
         self._result = None
-        self._is_running = False
-        self._cb = <aiocb*>calloc(1, sizeof(aiocb))
-        self._buffer_size = buffer_size
-        self._cb.aio_buf = <vvoid*>calloc(self._buffer_size, sizeof(char))
-        self._cb.aio_fildes = aio_file.fd
-        self._cb.aio_offset = offset
-        self._cb.aio_nbytes = nbytes
-        self._cb.aio_reqprio = reqprio
-        self._cb.aio_sigevent.sigev_notify = SIGEV_NONE
-        self._cb.aio_lio_opcode = state
+        self.is_running = False
+        self.cb = <aiocb*>calloc(1, sizeof(aiocb))
+        self.buffer_size = buffer_size
+        self.cb.aio_buf = <vvoid*>calloc(self.buffer_size, sizeof(char))
+        self.cb.aio_fildes = aio_file.fd
+        self.cb.aio_offset = offset
+        self.cb.aio_nbytes = nbytes
+        self.cb.aio_reqprio = reqprio
+        self.cb.aio_sigevent.sigev_notify = SIGEV_NONE
+        self.cb.aio_lio_opcode = state
         self._closed = False
 
     def run(self):
         cdef int result
 
-        if self._is_running:
+        if self.is_running:
             raise RuntimeError("Operation already in progress")
 
         try:
-            self._is_running = True
+            self.is_running = True
 
             if self._state == LIO_READ:
-                result = aio_read(self._cb)
+                result = aio_read(self.cb)
             elif self._state == LIO_WRITE:
-                result = aio_write(self._cb)
+                result = aio_write(self.cb)
             elif self._state == LIO_NOP:
-                result = aio_fsync(O_SYNC, self._cb)
+                result = aio_fsync(O_SYNC, self.cb)
             else:
                 raise RuntimeError('Oops...')
 
-            _handle_cerrors()
+            _handle_errno()
         except LimitationError:
-            self._is_running = False
+            self.is_running = False
             raise
 
-    def _check_closed(self):
+    def __check_closed(self):
         if self._closed:
             raise RuntimeError("Can't perform operation in when closed object")
 
     def poll(self):
-        self._check_closed()
+        self.__check_closed()
 
-        if not self._is_running:
+        if not self.is_running:
             raise RuntimeError("Can't perform pool on not running operation")
 
-        cdef int result = aio_error(self._cb)
+        cdef int result = aio_error(self.cb)
 
         if result == EINPROGRESS:
             return True
         elif result == 0:
             return False
         else:
-            return _handle_cerrors()
+            _handle_errno()
 
     def __len__(self):
         return self.nbytes
@@ -174,7 +210,7 @@ cdef class AIOOperation:
         else:
             op = 'uknown'
 
-        if not self._is_running:
+        if not self.is_running:
             state = 'not started'
         elif self.poll():
             state = 'pending'
@@ -187,28 +223,28 @@ cdef class AIOOperation:
 
     @property
     def nbytes(self):
-        self._check_closed()
-        return self._cb.aio_nbytes
+        self.__check_closed()
+        return self.cb.aio_nbytes
 
     @property
     def offset(self):
-        self._check_closed()
-        return self._cb.aio_offset
+        self.__check_closed()
+        return self.cb.aio_offset
 
     @property
     def reqprio(self):
-        self._check_closed()
-        return self._cb.aio_reqprio
+        self.__check_closed()
+        return self.cb.aio_reqprio
 
     @property
     def buffer(self):
-        self._check_closed()
-        return (<char*>self._cb.aio_buf)[:self._buffer_size]
+        self.__check_closed()
+        return (<char*>self.cb.aio_buf)[:self.buffer_size]
 
     @buffer.setter
     def buffer(self, bytes data):
-        self._check_closed()
-        memcpy(self._cb.aio_buf, <vvoid*>(<char*>data), len(data))
+        self.__check_closed()
+        memcpy(self.cb.aio_buf, <vvoid*>(<char*>data), len(data))
 
     def result(self):
         cdef ssize_t result
@@ -217,8 +253,8 @@ cdef class AIOOperation:
             if self.poll():
                 raise RuntimeError("Operation in progress")
 
-            result = aio_return(self._cb)
-            self._result = (<char*>self._cb.aio_buf)[:result]
+            result = aio_return(self.cb)
+            self._result = (<char*>self.cb.aio_buf)[:result]
 
         return self._result
 
@@ -227,10 +263,15 @@ cdef class AIOOperation:
         return self._closed
 
     def close(self):
-        self._check_closed()
+        self.__check_closed()
         self._closed = True
-        free(self._cb.aio_buf)
-        free(self._cb)
+        free(self.cb.aio_buf)
+        free(self.cb)
+
+    def __dealloc__(self):
+        if self._closed:
+            return
+        self.close()
 
     def __await__(self):
         while True:
@@ -245,12 +286,5 @@ cdef class AIOOperation:
 
         return self.result()
 
-    __next__ = __await__
-
     def __iter__(self):
-        return self
-
-    def __dealloc__(self):
-        if self._closed:
-            return
-        self.close()
+        return self.__await__()

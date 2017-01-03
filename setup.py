@@ -9,25 +9,28 @@ libraries = []
 if platform == 'linux':
     libraries.append('rt')
 
-try:
-    from Cython.Build import cythonize
+if platform in ('linux', 'darwin'):
+    try:
+        from Cython.Build import cythonize
 
-    extensions = cythonize([
-        Extension(
-            "aiofile.aio",
-            ["aiofile/aio.pyx"],
-            libraries=libraries,
-        ),
-    ], force=True, emit_linenums=True)
+        extensions = cythonize([
+            Extension(
+                "aiofile._aio",
+                ["aiofile/_aio.pyx"],
+                libraries=libraries,
+            ),
+        ], force=True, emit_linenums=False)
 
-except ImportError:
-    extensions = [
-        Extension(
-            "aiofile.aio",
-            ["aiofile/aio.c"],
-            libraries=libraries,
-        ),
-    ]
+    except ImportError:
+        extensions = [
+            Extension(
+                "aiofile._aio",
+                ["aiofile/_aio.c"],
+                libraries=libraries,
+            ),
+        ]
+else:
+    extensions = []
 
 
 setup(
@@ -37,6 +40,9 @@ setup(
     packages=[
         'aiofile',
     ],
+    package_data={
+        'aiofile': ['_aio.pyi']
+    },
     license=module.license,
     description=module.package_info,
     long_description=open("README.rst").read(),
