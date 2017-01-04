@@ -41,6 +41,27 @@ Features
 Code examples
 -------------
 
+Totally async read and write:
+
+.. code-block:: python
+
+    from aiofile import AIOFile, Reader, Writer
+
+    async def main(loop):
+        aio_file = AIOFile("/tmp/hello.txt", 'w+', loop=loop)
+
+        await aio_file.write(b"Hello ")
+        await aio_file.write(b"world", offset=7)
+        await aio_file.flush()
+
+        print(await aio_file.read())
+
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(main(loop))
+
+
+Write and read with helpers:
+
 .. code-block:: python
 
     from aiofile import AIOFile, Reader, Writer
@@ -58,6 +79,9 @@ Code examples
 
         async for chunk in reader:
             print(chunk)
+
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(main(loop))
 
 
 Performance
