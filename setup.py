@@ -4,7 +4,7 @@ from setuptools import setup, Extension
 from sys import platform
 
 
-version_info = (0, 1, 1)
+version_info = (0, 1, 2)
 
 author_info = (
     ('Dmitry Orlov', 'me@mosquito.su'),

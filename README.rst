@@ -30,8 +30,8 @@ Development - BETA
 Features
 --------
 
-* For POSIX (MacOS X and Linux) using C implementaion base on `aio.h`_.
-* For non POSIX systems use thread-based implementation (in development)
+* For POSIX (MacOS X and Linux) using C implementaion based on `aio.h`_.
+* For non-POSIX systems using thread-based implementation (in development)
 
 .. _aio.h: https://github.com/torvalds/linux/blob/master/include/linux/aio.h
 
