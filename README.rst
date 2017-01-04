@@ -19,7 +19,8 @@ AIOFile
     :target: https://pypi.python.org/pypi/aiofile/
 
 
-Asynchronous file operations.
+Real asynchronous file operations with asyncio support.
+
 
 Status
 ------
@@ -30,6 +31,7 @@ Development - BETA
 Features
 --------
 
+* AIOFile has no internal pointer. You should pass ``offset`` and ``chunk_size`` for each operation or use helpers (Reader or Writer).
 * For POSIX (MacOS X and Linux) using C implementaion based on `aio.h`_.
 * For non-POSIX systems using thread-based implementation (in development)
 
@@ -56,3 +58,13 @@ Code examples
 
         async for chunk in reader:
             print(chunk)
+
+
+Performance
+-----------
+
+AIOFile has been tested on MacOS X and Linux.
+In case the number of operations is too big (about 10,000 or more) it's faster by 50% 
+than native python ``open`` and ``loop.run_in_executor``.
+
+
