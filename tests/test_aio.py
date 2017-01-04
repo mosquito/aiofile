@@ -1,6 +1,10 @@
+import sys
 from aiofile._aio import AIOFile
 from aiofile.utils import Reader, Writer
 from . import *
+
+
+PY35 = sys.version_info >= (3, 5)
 
 
 @pytest.mark.asyncio
@@ -69,6 +73,7 @@ def test_read_write_offset(temp_file, uuid):
 
 
 @pytest.mark.asyncio
+@pytest.mark.skip(not PY35)
 def test_reader_writer(temp_file, uuid):
     r_file = AIOFile(temp_file, 'r')
     w_file = AIOFile(temp_file, 'w')
