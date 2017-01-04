@@ -19,4 +19,40 @@ AIOFile
     :target: https://pypi.python.org/pypi/aiofile/
 
 
-Asynchronous file operations
+Asynchronous file operations.
+
+Status
+------
+
+Development - BETA
+
+
+Features
+--------
+
+* For POSIX (MacOS X and Linux) using C implementaion base on `aio.h`_.
+* For non POSIX systems use thread-based implementation (in development)
+
+.. _aio.h: https://github.com/torvalds/linux/blob/master/include/linux/aio.h
+
+
+Code examples
+-------------
+
+.. code-block:: python
+
+    from aiofile import AIOFile, Reader, Writer
+
+    async def main(loop):
+        aio_file = AIOFile("/tmp/hello.txt", 'w+', loop=loop)
+
+        writer = Writer(aio_file)
+        reader = Reader(aio_file, chunk_size=8)
+
+        await writer(b"Hello")
+        await writer(b" ")
+        await writer(b"World")
+        await aio_file.flush()
+
+        async for chunk in reader:
+            print(chunk)
