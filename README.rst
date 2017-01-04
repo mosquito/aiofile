@@ -32,10 +32,11 @@ Features
 --------
 
 * AIOFile has no internal pointer. You should pass ``offset`` and ``chunk_size`` for each operation or use helpers (Reader or Writer).
-* For POSIX (MacOS X and Linux) using C implementaion based on `aio.h`_.
+* For POSIX (MacOS X and Linux) using C implementaion based on `aio.h`_ (using `Cython`_).
 * For non-POSIX systems using thread-based implementation (in development)
 
 .. _aio.h: https://github.com/torvalds/linux/blob/master/include/linux/aio.h
+.. _Cython: http://cython.org
 
 
 Code examples
