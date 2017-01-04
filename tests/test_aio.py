@@ -83,6 +83,10 @@ def test_reader_writer(temp_file, uuid):
     count = 0
     for async_chunk in Reader(r_file, chunk_size=len(uuid)):
         chunk = yield from async_chunk
+
+        if not chunk:
+            break
+
         assert chunk.decode() == uuid
         count += 1
 

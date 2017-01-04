@@ -22,7 +22,7 @@ class Reader:
         self.__offset += chunk_size
 
         if chunk_size == 0:
-            raise stop_iteration()
+            raise stop_iteration(chunk)
 
         return chunk
 
@@ -32,8 +32,14 @@ class Reader:
     def __aiter__(self):
         return self
 
+    def __next__(self):
+        return self.__next(StopIteration)
+
+    next = __next__
+
     def __iter__(self):
-        yield self.__next(StopAsyncIteration)
+        while True:
+            yield self.__next(StopIteration)
 
 
 class Writer:
