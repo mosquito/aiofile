@@ -45,6 +45,7 @@ Totally async read and write:
 
 .. code-block:: python
 
+    import asyncio
     from aiofile import AIOFile, Reader, Writer
 
     async def main(loop):
@@ -64,6 +65,7 @@ Write and read with helpers:
 
 .. code-block:: python
 
+    import asyncio
     from aiofile import AIOFile, Reader, Writer
 
     async def main(loop):
