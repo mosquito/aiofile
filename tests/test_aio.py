@@ -73,7 +73,6 @@ def test_read_write_offset(temp_file, uuid):
 
 
 @pytest.mark.asyncio
-@pytest.mark.skip(not PY35)
 def test_reader_writer(temp_file, uuid):
     r_file = AIOFile(temp_file, 'r')
     w_file = AIOFile(temp_file, 'w')

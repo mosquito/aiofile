@@ -7,7 +7,13 @@ from posix.signal cimport sigevent, SIGEV_NONE
 from posix.types cimport off_t
 from posix.stat cimport fstat, struct_stat
 from cpython cimport object, bytes, bool
+from cpython cimport version
 # from posix.time cimport timespec
+
+import asyncio
+
+
+cdef bool PY_35 = version.PY_MAJOR_VERSION >=3 and version.PY_MINOR_VERSION >= 5
 
 
 class LimitationError(Exception):
@@ -64,12 +70,16 @@ cdef class AIOFile:
     cdef int fd
     cdef bool binary
     cdef str _fname
+    cdef object loop
 
-    def __init__(self, str filename, str mode="r", int access_mode=0x644):
+    def __init__(self, str filename, str mode="r", int access_mode=0x644, loop=None):
+
         cdef cmode = 0
 
         self._fname = filename
         self.binary = 'b' in mode
+
+        self.loop = loop or asyncio.get_event_loop()
 
         if '+' in mode:
             cmode |= O_CREAT
@@ -102,7 +112,7 @@ cdef class AIOFile:
             fstat(self.fd, &stat)
             size = stat.st_size
 
-        return AIOOperation(LIO_READ, self, offset, size, priority)
+        return AIOOperation(LIO_READ, self, offset, size, priority, loop=self.loop)
 
     def write(self, data, unsigned int offset=0, int priority=0):
         if isinstance(data, str):
@@ -112,12 +122,12 @@ cdef class AIOFile:
         else:
             raise ValueError("Data must be str or bytes")
 
-        op = AIOOperation(LIO_WRITE, self, offset, len(data), priority)
+        op = AIOOperation(LIO_WRITE, self, offset, len(data), priority, loop=self.loop)
         op.buffer = bytes_data
         return op
 
     def flush(self, int priority=0):
-        return AIOOperation(LIO_NOP, self, 0, 0, priority)
+        return AIOOperation(LIO_NOP, self, 0, 0, priority, loop=self.loop)
 
 
 cdef class AIOOperation:
@@ -127,10 +137,13 @@ cdef class AIOOperation:
     cdef int _state
     cdef object _result
     cdef bool is_running
+    cdef object loop
 
-    def __init__(self, int state, AIOFile aio_file, unsigned int offset, int nbytes, int reqprio):
+    def __init__(self, int state, AIOFile aio_file, unsigned int offset,
+                 int nbytes, int reqprio, object loop):
 
         self._state = state
+        self.loop = loop
 
         if state not in (LIO_READ, LIO_WRITE, LIO_NOP):
             raise ValueError("Invalid state")
@@ -273,7 +286,7 @@ cdef class AIOOperation:
             return
         self.close()
 
-    def __await__(self):
+    def __iter__(self):
         while True:
             try:
                 self.run()
@@ -286,5 +299,6 @@ cdef class AIOOperation:
 
         return self.result()
 
-    def __iter__(self):
-        return self.__await__()
+    if PY_35:
+        def __await__(self):
+            return self.__iter__()

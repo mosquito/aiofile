@@ -1,9 +1,8 @@
 import asyncio
+import sys
 
-try:
-    StopAsyncIteration
-except NameError:
-    StopAsyncIteration = StopIteration
+
+PY_35 = sys.version_info >= (3, 5)
 
 
 class Reader:
@@ -15,31 +14,31 @@ class Reader:
         self.__aio_file = aio_file
         self.__priority = int(priority)
 
+    if PY_35:
+        @asyncio.coroutine
+        def __anext__(self):
+            chunk = yield from self.__aio_file.read(self.__chunk_size, self.__offset, self.__priority)
+            chunk_size = len(chunk)
+            self.__offset += chunk_size
+
+            if chunk_size == 0:
+                raise StopAsyncIteration(chunk)
+
+            return chunk
+
+        def __aiter__(self):
+            return self
+
     @asyncio.coroutine
-    def __next(self, stop_iteration=StopIteration):
+    def __next__(self):
         chunk = yield from self.__aio_file.read(self.__chunk_size, self.__offset, self.__priority)
         chunk_size = len(chunk)
         self.__offset += chunk_size
 
-        if chunk_size == 0:
-            raise stop_iteration(chunk)
-
         return chunk
 
-    def __anext__(self):
-        return self.__next(StopAsyncIteration)
-
-    def __aiter__(self):
-        return self
-
-    def __next__(self):
-        return self.__next(StopIteration)
-
-    next = __next__
-
     def __iter__(self):
-        while True:
-            yield self.__next(StopIteration)
+        return self
 
 
 class Writer:

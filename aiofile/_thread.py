@@ -1,4 +1,5 @@
-from concurrent.futures import ThreadPoolExecutor
+import asyncio
+import os
 
 try:
     from typing import Awaitable
@@ -7,8 +8,18 @@ except ImportError:
 
 
 class AIOFile:
-    def __init__(self, filename: str, mode:str="r", access_mode:int=0x644):
-        pass
+    def __init__(self, filename: str, mode: str="r",
+                 access_mode: int=0x644, loop: asyncio.AbstractEventLoop=None):
+
+        is_new = os.path.exists(filename)
+
+        self.__file = open(filename, mode=mode)
+
+        if is_new:
+            os.chmod(filename, access_mode)
+
+        self.__loop = loop
+
 
     def __repr__(self):
         pass
