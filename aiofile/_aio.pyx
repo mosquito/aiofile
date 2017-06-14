@@ -1,27 +1,20 @@
-from libc.errno cimport *
+from posix.signal cimport sigval, SIGEV_THREAD
+from libc.errno cimport errno, EAGAIN
 from libc.stdlib cimport calloc, free
 from libc.string cimport memcpy, strerror
 from posix.unistd cimport close as cclose
-from posix.fcntl cimport open as copen, O_RDWR, O_APPEND, O_CREAT, O_RDONLY, O_SYNC
-from posix.signal cimport sigevent, SIGEV_NONE
-from posix.types cimport off_t
+from posix.fcntl cimport open as copen, O_RDWR, O_APPEND, O_CREAT, O_RDONLY, O_SYNC, O_NONBLOCK
 from posix.stat cimport fstat, struct_stat
-from cpython cimport object, bytes, bool
-from cpython cimport version
-# from posix.time cimport timespec
+from errno import errorcode
+from cpython cimport bytes, bool
 
-import asyncio
-
-
-cdef bool PY_35 = version.PY_MAJOR_VERSION >=3 and version.PY_MINOR_VERSION >= 5
-
-
-class LimitationError(Exception):
-    pass
+from posix.types cimport off_t
+from posix.signal cimport sigevent
 
 
 cdef extern from *:
-     ctypedef int vvoid "volatile void"
+    ctypedef int vvoid "volatile void"
+
 
 cdef extern from "<aio.h>" nogil:
 
@@ -57,51 +50,94 @@ IO_WRITE = LIO_WRITE
 IO_NOP = LIO_NOP
 
 
-def _handle_errno():
-    if errno == EAGAIN:
-        raise LimitationError("Resource limitaion")
-    elif errno == ENOSYS:
-        raise SystemError("Syscall is not supported")
-    elif errno != 0:
-        raise RuntimeError(strerror(errno).decode())
+cdef enum:
+    AIO_OP_INIT,
+    AIO_OP_RUN,
+    AIO_OP_DONE,
+
+
+cdef void on_event(sigval sv):
+    cdef int* val = <int*>sv.sival_ptr
+    val[0] = AIO_OP_DONE
+
+
+cpdef handle_errno(code=None):
+    cdef str error_code
+    cdef str error_st
+    cdef object exc_class
+
+    if not code:
+        code = errno
+
+    exc_class = SystemError
+
+    if code == EAGAIN:
+        exc_class = PermissionError
+
+    if code in errorcode:
+        error_code = errorcode[code]
+        error_str = strerror(errno).decode()
+
+        raise exc_class(error_code, error_str)
+
+    return code
+
+
+cdef int cfile_mode(str mode):
+    if len(set(mode) & set("awr")) > 1:
+        raise ValueError('must have exactly one of create/read/write/append mode')
+
+    cdef int cmode = 0
+
+    cmode |= O_NONBLOCK
+
+    if '+' in mode:
+        cmode |= O_CREAT
+    if "a" in mode:
+        cmode |= O_RDWR
+        cmode |= O_APPEND
+    elif "w" in mode:
+        cmode |= O_RDWR
+    elif "r" in mode:
+        cmode |= O_RDONLY
+
+    return cmode
 
 
 cdef class AIOFile:
-    cdef int fd
-    cdef bool binary
-    cdef str _fname
-    cdef object loop
+    cdef int __fileno
+    cdef char* _fname
 
-    def __init__(self, str filename, str mode="r", int access_mode=0x644, loop=None):
+    def __cinit__(self, str filename, str mode="r", int access_mode=0o644):
+        bfilename = filename.encode()
+        self._fname = bfilename
 
-        cdef cmode = 0
+        self.__fileno = copen(self._fname, cfile_mode(mode), access_mode)
 
-        self._fname = filename
-        self.binary = 'b' in mode
-
-        self.loop = loop or asyncio.get_event_loop()
-
-        if '+' in mode:
-            cmode |= O_CREAT
-
-        if "a" in mode:
-            cmode |= O_RDWR
-            cmode |= O_APPEND
-        elif "w" in mode:
-            cmode |= O_RDWR
-        elif "r" in mode:
-            cmode |= O_RDONLY
-
-        self.fd = copen(filename.encode(), cmode, access_mode)
-
-        if self.fd == -1:
+        if self.__fileno == -1:
             raise IOError('Couldn\'t open file "%s"' % filename)
 
     def __repr__(self):
         return "<AIOFile: %r>" % self._fname
 
+    cpdef void close(self):
+        if self.__fileno == -2:
+            return
+
+        cclose(self.__fileno)
+        self.__fileno = -2
+
+    cpdef int fileno(self):
+        return self.__fileno
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        self.close()
+
     def __dealloc__(self):
-        cclose(self.fd)
+        self.close()
 
     def read(self, int size=-1, unsigned int offset=0, int priority=0):
         if size < -1:
@@ -109,10 +145,10 @@ cdef class AIOFile:
 
         cdef struct_stat stat
         if size == -1:
-            fstat(self.fd, &stat)
+            fstat(self.__fileno, &stat)
             size = stat.st_size
 
-        return AIOOperation(LIO_READ, self, offset, size, priority, loop=self.loop)
+        return AIOOperation(LIO_READ, self.__fileno, offset, size, priority)
 
     def write(self, data, unsigned int offset=0, int priority=0):
         if isinstance(data, str):
@@ -122,183 +158,154 @@ cdef class AIOFile:
         else:
             raise ValueError("Data must be str or bytes")
 
-        op = AIOOperation(LIO_WRITE, self, offset, len(data), priority, loop=self.loop)
+        op = AIOOperation(LIO_WRITE, self.__fileno, offset, len(data), priority)
         op.buffer = bytes_data
         return op
 
     def flush(self, int priority=0):
-        return AIOOperation(LIO_NOP, self, 0, 0, priority, loop=self.loop)
+        return AIOOperation(LIO_NOP, self.__fileno, 0, 0, priority)
 
 
 cdef class AIOOperation:
     cdef aiocb* cb
-    cdef unsigned int buffer_size
-    cdef bool _closed
-    cdef int _state
-    cdef object _result
-    cdef bool is_running
-    cdef object loop
+    cdef int state
+    cdef size_t buffer_size
+    cdef int offset
+    cdef int __state
 
-    def __init__(self, int state, AIOFile aio_file, unsigned int offset,
-                 int nbytes, int reqprio, object loop):
-
-        self._state = state
-        self.loop = loop
-
-        if state not in (LIO_READ, LIO_WRITE, LIO_NOP):
+    def __cinit__(self, int state, int fd, unsigned int offset, int nbytes, int reqprio):
+        if state not in (IO_READ, IO_WRITE, IO_NOP):
             raise ValueError("Invalid state")
 
-        if self._state == LIO_READ:
-            buffer_size = nbytes
-        elif self._state == LIO_WRITE:
-            buffer_size = nbytes
-        elif self._state == LIO_NOP:
-            buffer_size = 0
+        with nogil:
+            self.__state = AIO_OP_INIT
+            self.cb = <aiocb*>calloc(1, sizeof(aiocb))
 
-        self._result = None
-        self.is_running = False
-        self.cb = <aiocb*>calloc(1, sizeof(aiocb))
-        self.buffer_size = buffer_size
-        self.cb.aio_buf = <vvoid*>calloc(self.buffer_size, sizeof(char))
-        self.cb.aio_fildes = aio_file.fd
-        self.cb.aio_offset = offset
-        self.cb.aio_nbytes = nbytes
-        self.cb.aio_reqprio = reqprio
-        self.cb.aio_sigevent.sigev_notify = SIGEV_NONE
-        self.cb.aio_lio_opcode = state
-        self._closed = False
+        if self.state in (IO_READ, IO_WRITE):
+            self.init_buffer(nbytes)
+        else:
+            self.init_buffer(0)
 
-    def run(self):
-        cdef int result
+        with nogil:
+            self.cb.aio_fildes = fd
+            self.cb.aio_offset = offset
+            self.cb.aio_nbytes = nbytes
+            self.cb.aio_reqprio = reqprio
+            self.cb.aio_lio_opcode = state
+            self.cb.aio_sigevent.sigev_notify = SIGEV_THREAD
+            self.cb.aio_sigevent.sigev_signo = 0
+            self.cb.aio_sigevent.sigev_notify_function = on_event
+            self.cb.aio_sigevent.sigev_value.sival_ptr = &self.__state
+            self.cb.aio_sigevent.sigev_signo = 0
 
-        if self.is_running:
+    def __iter__(self):
+        if self.done():
+            raise RuntimeError("Operation already done")
+
+        if self.is_running():
             raise RuntimeError("Operation already in progress")
 
-        try:
-            self.is_running = True
+        self.__state = AIO_OP_RUN
 
-            if self._state == LIO_READ:
-                result = aio_read(self.cb)
-            elif self._state == LIO_WRITE:
-                result = aio_write(self.cb)
-            elif self._state == LIO_NOP:
-                result = aio_fsync(O_SYNC, self.cb)
-            else:
-                raise RuntimeError('Oops...')
+        cdef int result
+        cdef int error
 
-            _handle_errno()
-        except LimitationError:
-            self.is_running = False
-            raise
+        if self.cb.aio_lio_opcode == LIO_READ:
+            result = aio_read(self.cb)
+        elif self.cb.aio_lio_opcode == LIO_WRITE:
+            result = aio_write(self.cb)
+        elif self.cb.aio_lio_opcode == LIO_NOP:
+            result = aio_fsync(O_SYNC, self.cb)
 
-    def __check_closed(self):
-        if self._closed:
-            raise RuntimeError("Can't perform operation in when closed object")
+        error = errno
+        handle_errno(error)
 
-    def poll(self):
-        self.__check_closed()
+        while not self.done():
+            yield
 
-        if not self.is_running:
-            raise RuntimeError("Can't perform pool on not running operation")
+        self.buffer_size = aio_return(self.cb)
 
-        cdef int result = aio_error(self.cb)
+        return self.buffer
 
-        if result == EINPROGRESS:
-            return True
-        elif result == 0:
-            return False
-        else:
-            _handle_errno()
+    cdef void init_buffer(self, size_t size):
+        self.free_buffer()
+        with nogil:
+            self.buffer_size = size
+            self.cb.aio_buf = <vvoid*>calloc(size, sizeof(char))
 
-    def __len__(self):
-        return self.nbytes
+    cdef void set_buffer(self, bytes data):
+        cdef char* cdata = <char*> data
+        self.init_buffer(len(data) + 1)
+        memcpy(self.cb.aio_buf, <vvoid*>(cdata), len(data))
 
-    def __repr__(self):
-        if self._state == LIO_READ:
-            op = 'read'
-        elif self._state == LIO_WRITE:
-            op = 'write'
-        elif self._state == LIO_NOP:
-            op = 'fsync'
-        else:
-            op = 'uknown'
-
-        if not self.is_running:
-            state = 'not started'
-        elif self.poll():
-            state = 'pending'
-        elif self.closed:
-            state = 'closed'
-        else:
-            state = 'done'
-
-        return "<AIOOperation(%r): %s>" % (op, state)
-
-    @property
-    def nbytes(self):
-        self.__check_closed()
-        return self.cb.aio_nbytes
-
-    @property
-    def offset(self):
-        self.__check_closed()
-        return self.cb.aio_offset
-
-    @property
-    def reqprio(self):
-        self.__check_closed()
-        return self.cb.aio_reqprio
+    cdef void free_buffer(self):
+        with nogil:
+            if self.buffer_size:
+                free(self.cb.aio_buf)
+            self.buffer_size = 0
 
     @property
     def buffer(self):
-        self.__check_closed()
-        return (<char*>self.cb.aio_buf)[:self.buffer_size]
+        cdef char* buf = <char*>self.cb.aio_buf
+        return buf[:self.buffer_size]
 
     @buffer.setter
     def buffer(self, bytes data):
-        self.__check_closed()
-        memcpy(self.cb.aio_buf, <vvoid*>(<char*>data), len(data))
+        if self.cb.aio_lio_opcode != LIO_WRITE:
+            raise TypeError("Buffer should be set only in IO_WRITE mode")
 
-    def result(self):
-        cdef ssize_t result
+        if self.done():
+            raise RuntimeError("Invalid state")
 
-        if self._result is None:
-            if self.poll():
-                raise RuntimeError("Operation in progress")
+        self.set_buffer(data)
 
-            result = aio_return(self.cb)
-            self._result = (<char*>self.cb.aio_buf)[:result]
+    cpdef bool done(self):
+        return self.__state == AIO_OP_DONE
 
-        return self._result
+    cpdef bool is_running(self):
+        return self.__state == AIO_OP_RUN
 
-    @property
-    def closed(self):
-        return self._closed
+    def __await__(self):
+        return self.__iter__()
 
-    def close(self):
-        self.__check_closed()
-        self._closed = True
-        free(self.cb.aio_buf)
+    def __delloc__(self):
+        self.free_buffer()
         free(self.cb)
 
-    def __dealloc__(self):
-        if self._closed:
-            return
-        self.close()
+    @property
+    def fileno(self):
+        return self.cb.aio_fildes
 
-    def __iter__(self):
-        while True:
-            try:
-                self.run()
-                break
-            except LimitationError:
-                yield
+    @property
+    def offset(self):
+        return self.cb.aio_offset
 
-        while self.poll():
-            yield
+    @property
+    def nbytes(self):
+        return self.cb.aio_nbytes
 
-        return self.result()
+    @property
+    def reqprio(self):
+        return self.cb.aio_reqprio
 
-    if PY_35:
-        def __await__(self):
-            return self.__iter__()
+    @property
+    def opcode(self):
+        return self.cb.aio_lio_opcode
+
+    @property
+    def opcode_str(self):
+        if self.opcode == LIO_READ:
+            return "IO_READ"
+        elif self.opcode == LIO_WRITE:
+            return "IO_WRITE"
+        elif self.opcode == LIO_NOP:
+            return "IO_NOP"
+
+    def __repr__(self):
+        return "<AIOOperation[{!r}, fd={}, offset={}, nbytes={}, reqprio={}]>".format(
+            self.opcode_str,
+            self.fileno,
+            self.offset,
+            self.nbytes,
+            self.reqprio,
+        )
