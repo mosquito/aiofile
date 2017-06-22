@@ -1,11 +1,10 @@
 from aiofile import AIOFile
 from aiofile.utils import Reader, Writer
-from aiofile.posix_aio import AIOOperation, IO_WRITE, IO_NOP, IO_READ
+from aiofile.thread_aio import ThreadedAIOOperation, IO_WRITE, IO_NOP, IO_READ
 from .. import *
 
 
-
-AIOFile.OPERATION_CLASS = AIOOperation
+AIOFile.OPERATION_CLASS = ThreadedAIOOperation
 AIOFile.IO_READ = IO_READ
 AIOFile.IO_NOP = IO_NOP
 AIOFile.IO_WRITE = IO_WRITE
