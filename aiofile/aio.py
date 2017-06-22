@@ -1,7 +1,6 @@
 import os
-from typing import Union
-
 import asyncio
+
 
 try:
     from .posix_aio import IO_NOP, IO_WRITE, IO_READ, AIOOperation
@@ -83,7 +82,7 @@ class AIOFile:
 
         return self.OPERATION_CLASS(self.IO_READ, self.__fileno, offset, size, priority, self.__loop)
 
-    def write(self, data: Union[str, bytes], offset: int=0, priority: int=0):
+    def write(self, data: (str, bytes), offset: int=0, priority: int=0):
         if isinstance(data, str):
             bytes_data = data.encode()
         elif isinstance(data, bytes):
