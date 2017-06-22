@@ -135,5 +135,6 @@ crashlytics-build.properties
 fabric.properties
 
 /env*
+__pycache__
 
 *.c

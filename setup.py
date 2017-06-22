@@ -1,16 +1,11 @@
-#!/usr/bin/env python
-# encoding: utf-8
 from setuptools import setup, Extension
 from sys import platform
+from os import path
+
+from importlib.machinery import SourceFileLoader
 
 
-version_info = (0, 1, 4)
-
-author_info = (
-    ('Dmitry Orlov', 'me@mosquito.su'),
-)
-
-
+module = SourceFileLoader("version", path.join("aiofile", "version.py")).load_module()
 libraries = []
 
 
@@ -23,8 +18,8 @@ if platform in ('linux', 'darwin'):
 
         extensions = cythonize([
             Extension(
-                "aiofile._aio",
-                ["aiofile/_aio.pyx"],
+                "aiofile.posix_aio",
+                ["aiofile/posix_aio.pyx"],
                 libraries=libraries,
             ),
         ], force=True, emit_linenums=False)
@@ -32,8 +27,8 @@ if platform in ('linux', 'darwin'):
     except ImportError:
         extensions = [
             Extension(
-                "aiofile._aio",
-                ["aiofile/_aio.c"],
+                "aiofile.posix_aio",
+                ["aiofile/posix_aio.c"],
                 libraries=libraries,
             ),
         ]
@@ -44,20 +39,17 @@ else:
 setup(
     name='aiofile',
     ext_modules=extensions,
-    version=".".join(str(x) for x in version_info),
+    version=module.__version__,
     packages=[
         'aiofile',
     ],
-    package_data={
-        'aiofile': ['_aio.pyi']
-    },
-    license="Apache 2",
-    description="Asynchronous file operations",
+    license=module.package_license,
+    description=module.package_info,
     long_description=open("README.rst").read(),
     platforms=["POSIX"],
-    url='http://github.com/mosquito/aiofile',
-    author=", ".join("{} <{}>".format(*info) for info in author_info),
-    author_email=", ".join("{}".format(info[1]) for info in author_info),
+    url=module.project_home,
+    author=module.__author__,
+    author_email=module.team_email,
     provides=["aiofile"],
     build_requires=['cython'],
     keywords="aio, python, asyncio, cython",
