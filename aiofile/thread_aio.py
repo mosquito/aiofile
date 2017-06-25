@@ -1,6 +1,7 @@
 import asyncio
 import os
-from functools import partial
+from collections import defaultdict
+from threading import Lock
 
 
 IO_READ = 0
@@ -8,8 +9,12 @@ IO_WRITE = 1
 IO_NOP = 2
 
 
+_LOCKS = defaultdict(Lock)
+
+
 class ThreadedAIOOperation:
-    __slots__ = '__fd', '__offset', '__nbytes', '__reqprio', '__opcode', '__buffer', '__loop', '__state'
+    __slots__ = ('__fd', '__offset', '__nbytes', '__reqprio', '__opcode',
+                 '__buffer', '__loop', '__state', '__lock')
 
     def __init__(self, opcode: int, fd: int, offset: int, nbytes: int, reqprio: int,
                  loop: asyncio.AbstractEventLoop):
@@ -25,6 +30,7 @@ class ThreadedAIOOperation:
         self.__opcode = opcode
         self.__buffer = b''
         self.__state = None
+        self.__lock = _LOCKS[self.__fd]
 
     @property
     def buffer(self):
@@ -34,21 +40,25 @@ class ThreadedAIOOperation:
     def buffer(self, data: bytes):
         self.__buffer = data
 
+    def _execute(self):
+        with self.__lock:
+            os.lseek(self.__fd, self.__offset, os.SEEK_SET)
+
+            if self.opcode == IO_READ:
+                return os.read(self.__fd, self.__nbytes)
+            elif self.opcode == IO_WRITE:
+                return os.write(self.__fd, self.__buffer)
+            elif self.opcode == IO_NOP:
+                return os.fsync(self.__fd)
+
+            _LOCKS.pop(self.__fd)
+
     def __iter__(self):
         if self.__state is not None:
             raise RuntimeError('Invalid state')
 
         self.__state = False
-
-        if self.opcode == IO_READ:
-            operation = partial(os.read, self.__fd, self.__nbytes)
-        elif self.opcode == IO_WRITE:
-            operation = partial(os.write, self.__fd, self.__buffer)
-        elif self.opcode == IO_NOP:
-            operation = partial(os.fsync, self.__fd)
-
-        yield
-        result = yield from self.__loop.run_in_executor(None, operation)
+        result = yield from self.__loop.run_in_executor(None, self._execute)
         self.__state = True
         return result
 

@@ -7,10 +7,14 @@ from . import *
 
 PY35 = sys.version_info >= (3, 5)
 
-AIOFile.OPERATION_CLASS = ThreadedAIOOperation
-AIOFile.IO_READ = IO_READ
-AIOFile.IO_NOP = IO_NOP
-AIOFile.IO_WRITE = IO_WRITE
+
+def thread_aio_file(name, mode):
+    AIOFile.OPERATION_CLASS = ThreadedAIOOperation
+    AIOFile.IO_READ = IO_READ
+    AIOFile.IO_NOP = IO_NOP
+    AIOFile.IO_WRITE = IO_WRITE
+
+    return AIOFile(name, mode)
 
 
 @pytest.mark.asyncio
@@ -18,7 +22,7 @@ def test_read(temp_file, uuid):
     with open(temp_file, "w") as f:
         f.write(uuid)
 
-    aio_file = AIOFile(temp_file, 'r')
+    aio_file = thread_aio_file(temp_file, 'r')
 
     data = yield from aio_file.read()
     data = data.decode()
@@ -28,8 +32,8 @@ def test_read(temp_file, uuid):
 
 @pytest.mark.asyncio
 def test_read_write(temp_file, uuid):
-    r_file = AIOFile(temp_file, 'r')
-    w_file = AIOFile(temp_file, 'w')
+    r_file = thread_aio_file(temp_file, 'r')
+    w_file = thread_aio_file(temp_file, 'w')
 
     yield from w_file.write(uuid)
     yield from w_file.fsync()
@@ -46,7 +50,7 @@ def test_read_offset(temp_file, uuid):
         for _ in range(10):
             f.write(uuid)
 
-    aio_file = AIOFile(temp_file, 'r')
+    aio_file = thread_aio_file(temp_file, 'r')
 
     data = yield from aio_file.read(
         offset=len(uuid),
@@ -60,8 +64,8 @@ def test_read_offset(temp_file, uuid):
 
 @pytest.mark.asyncio
 def test_read_write_offset(temp_file, uuid):
-    r_file = AIOFile(temp_file, 'r')
-    w_file = AIOFile(temp_file, 'w')
+    r_file = thread_aio_file(temp_file, 'r')
+    w_file = thread_aio_file(temp_file, 'w')
 
     for i in range(10):
         yield from w_file.write(uuid, offset=i * len(uuid))
@@ -80,8 +84,8 @@ def test_read_write_offset(temp_file, uuid):
 
 @pytest.mark.asyncio
 def test_reader_writer(temp_file, uuid):
-    r_file = AIOFile(temp_file, 'r')
-    w_file = AIOFile(temp_file, 'w')
+    r_file = thread_aio_file(temp_file, 'r')
+    w_file = thread_aio_file(temp_file, 'w')
 
     writer = Writer(w_file)
 

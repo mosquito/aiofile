@@ -32,7 +32,7 @@ def mode_to_flags(mode: str):
 
 
 class AIOFile:
-    __slots__ = '__fileno', '__fname', '__mode', '__access_mode', '__loop'
+    __slots__ = '__fileno', '__fname', '__mode', '__access_mode', '__loop',
 
     OPERATION_CLASS = AIOOperation
     IO_READ = IO_READ
