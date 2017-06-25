@@ -105,3 +105,6 @@ def test_reader_writer(temp_file, uuid):
         count += 1
 
     assert count == 100
+
+
+# TODO: Add tests with changing offset
