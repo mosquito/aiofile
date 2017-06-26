@@ -117,6 +117,10 @@ cdef dict AIO_FSYNC_ERRORS = {
 }
 
 
+class SystemLimitationError(ResourceWarning):
+    pass
+
+
 cdef class AIOOperation:
     cdef aiocb* cb
     cdef char* __buffer
@@ -187,6 +191,15 @@ cdef class AIOOperation:
         if result == 0:
             return
 
+        if error == EINVAL:
+            raise SystemLimitationError(
+                errorcode[error],
+                AIO_WRITE_ERRORS.get(
+                    error,
+                    strerror(error).decode()
+                )
+            )
+
         raise SystemError(
             errorcode[error],
             AIO_READ_ERRORS.get(
@@ -211,6 +224,15 @@ cdef class AIOOperation:
 
         if result == 0:
             return
+
+        if error == EINVAL:
+            raise SystemLimitationError(
+                errorcode[error],
+                AIO_WRITE_ERRORS.get(
+                    error,
+                    strerror(error).decode()
+                )
+            )
 
         raise SystemError(
             errorcode[error],
@@ -237,6 +259,15 @@ cdef class AIOOperation:
         if result == 0:
             return
 
+        if error == EINVAL:
+            raise SystemLimitationError(
+                errorcode[error],
+                AIO_WRITE_ERRORS.get(
+                    error,
+                    strerror(error).decode()
+                )
+            )
+
         raise SystemError(
             errorcode[error],
             AIO_FSYNC_ERRORS.get(
@@ -260,12 +291,17 @@ cdef class AIOOperation:
         # Switch context before execution
         yield
 
-        if self.cb.aio_lio_opcode == LIO_READ:
-            self.aio_read()
-        elif self.cb.aio_lio_opcode == LIO_WRITE:
-            self.aio_write()
-        elif self.cb.aio_lio_opcode == LIO_NOP:
-            self.aio_fsync()
+        while True:
+            try:
+                if self.cb.aio_lio_opcode == LIO_READ:
+                    self.aio_read()
+                elif self.cb.aio_lio_opcode == LIO_WRITE:
+                    self.aio_write()
+                elif self.cb.aio_lio_opcode == LIO_NOP:
+                    self.aio_fsync()
+                break
+            except SystemLimitationError:
+                yield
 
         # Awaiting callback when SIGEV_THREAD  (Linux)
         if self.cb.aio_sigevent.sigev_notify == SIGEV_THREAD:

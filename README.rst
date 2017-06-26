@@ -32,8 +32,8 @@ Features
 --------
 
 * AIOFile has no internal pointer. You should pass ``offset`` and ``chunk_size`` for each operation or use helpers (Reader or Writer).
-* For POSIX (MacOS X and Linux) using C implementaion based on `aio.h`_ (using `Cython`_).
-* For non-POSIX systems using thread-based implementation (in development)
+* For POSIX (MacOS X and Linux) using Cython implementaion based on `aio.h`_ (using `Cython`_).
+* For non-POSIX systems using thread-based implementation
 
 .. _aio.h: https://github.com/torvalds/linux/blob/master/include/linux/aio.h
 .. _Cython: http://cython.org
@@ -85,13 +85,4 @@ Write and read with helpers:
 
     loop = asyncio.get_event_loop()
     loop.run_until_complete(main(loop))
-
-
-Performance
------------
-
-AIOFile has been tested on MacOS X and Linux.
-In case the number of operations is too big (about 10,000 or more) it's faster by 50% 
-than native python ``open`` and ``loop.run_in_executor``.
-
 

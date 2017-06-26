@@ -73,6 +73,7 @@ class AIOFile:
     def __del__(self):
         self.close()
 
+    @asyncio.coroutine
     def read(self, size: int=-1, offset: int=0, priority: int=0):
         if size < -1:
             raise ValueError("Unsupported value %d for size" % size)
@@ -80,8 +81,9 @@ class AIOFile:
         if size == -1:
             size = os.stat(self.__fileno).st_size
 
-        return self.OPERATION_CLASS(self.IO_READ, self.__fileno, offset, size, priority, self.__loop)
+        return (yield from self.OPERATION_CLASS(self.IO_READ, self.__fileno, offset, size, priority, self.__loop))
 
+    @asyncio.coroutine
     def write(self, data: (str, bytes), offset: int=0, priority: int=0):
         if isinstance(data, str):
             bytes_data = data.encode()
@@ -92,7 +94,8 @@ class AIOFile:
 
         op = self.OPERATION_CLASS(self.IO_WRITE, self.__fileno, offset, len(bytes_data), priority, self.__loop)
         op.buffer = bytes_data
-        return op
+        return (yield from op)
 
+    @asyncio.coroutine
     def fsync(self, priority: int=0):
-        return self.OPERATION_CLASS(self.IO_NOP, self.__fileno, 0, 0, priority, self.__loop)
+        return (yield from self.OPERATION_CLASS(self.IO_NOP, self.__fileno, 0, 0, priority, self.__loop))
