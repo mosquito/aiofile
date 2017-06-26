@@ -113,3 +113,29 @@ async def test_reader_writer(loop, temp_file, uuid):
 
     async for chunk in Reader(r_file, chunk_size=len(uuid)):
         assert chunk.decode() == uuid
+
+
+@pytest.mark.asyncio
+async def test_parallel_writer(temp_file, uuid):
+    w_file = posix_aio_file(temp_file, 'w')
+    r_file = posix_aio_file(temp_file, 'r')
+
+    futures = list()
+
+    for i in range(2000):
+        futures.append(w_file.write(uuid, i * len(uuid), 0))
+
+    await asyncio.wait(futures)
+    await w_file.fsync()
+
+    count = 0
+    for async_chunk in Reader(r_file, chunk_size=len(uuid)):
+        chunk = await async_chunk
+
+        if not chunk:
+            break
+
+        assert chunk.decode() == uuid
+        count += 1
+
+    assert count == 2000
