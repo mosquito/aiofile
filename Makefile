@@ -5,9 +5,3 @@ linux_wheel:
 		--entrypoint /bin/bash \
 		quay.io/pypa/manylinux1_x86_64 \
 		/app/src/scripts/make-wheels.sh
-	docker run -it --rm \
-		-v `pwd`:/app/src:ro \
-		-v `pwd`/dist:/app/dst \
-		--entrypoint /bin/bash \
-		quay.io/pypa/manylinux1_i686 \
-		/app/src/scripts/make-wheels.sh
