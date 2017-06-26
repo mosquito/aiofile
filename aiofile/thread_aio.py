@@ -13,11 +13,10 @@ _LOCKS = defaultdict(Lock)
 
 
 class ThreadedAIOOperation:
-    __slots__ = ('__fd', '__offset', '__nbytes', '__reqprio', '__opcode',
+    __slots__ = ('__fd', '__offset', '__nbytes', '__opcode',
                  '__buffer', '__loop', '__state', '__lock')
 
-    def __init__(self, opcode: int, fd: int, offset: int, nbytes: int, reqprio: int,
-                 loop: asyncio.AbstractEventLoop):
+    def __init__(self, opcode: int, fd: int, offset: int, nbytes: int, loop: asyncio.AbstractEventLoop):
 
         if opcode not in (IO_READ, IO_WRITE, IO_NOP):
             raise ValueError('Invalid state')
@@ -26,7 +25,6 @@ class ThreadedAIOOperation:
         self.__fd = fd
         self.__offset = offset
         self.__nbytes = nbytes
-        self.__reqprio = reqprio
         self.__opcode = opcode
         self.__buffer = b''
         self.__state = None
@@ -99,15 +97,10 @@ class ThreadedAIOOperation:
     def nbytes(self):
         return self.__nbytes
 
-    @property
-    def reqprio(self):
-        return self.__reqprio
-
     def __repr__(self):
-        return "<AIOThreadOperation[{!r}, fd={}, offset={}, nbytes={}, reqprio={}]>".format(
+        return "<AIOThreadOperation[{!r}, fd={}, offset={}, nbytes={}]>".format(
             self.opcode_str,
             self.fileno,
             self.offset,
             self.nbytes,
-            self.reqprio,
         )

@@ -74,17 +74,17 @@ class AIOFile:
         self.close()
 
     @asyncio.coroutine
-    def read(self, size: int=-1, offset: int=0, priority: int=0):
+    def read(self, size: int=-1, offset: int=0):
         if size < -1:
             raise ValueError("Unsupported value %d for size" % size)
 
         if size == -1:
             size = os.stat(self.__fileno).st_size
 
-        return (yield from self.OPERATION_CLASS(self.IO_READ, self.__fileno, offset, size, priority, self.__loop))
+        return (yield from self.OPERATION_CLASS(self.IO_READ, self.__fileno, offset, size, self.__loop))
 
     @asyncio.coroutine
-    def write(self, data: (str, bytes), offset: int=0, priority: int=0):
+    def write(self, data: (str, bytes), offset: int=0):
         if isinstance(data, str):
             bytes_data = data.encode()
         elif isinstance(data, bytes):
@@ -92,10 +92,10 @@ class AIOFile:
         else:
             raise ValueError("Data must be str or bytes")
 
-        op = self.OPERATION_CLASS(self.IO_WRITE, self.__fileno, offset, len(bytes_data), priority, self.__loop)
+        op = self.OPERATION_CLASS(self.IO_WRITE, self.__fileno, offset, len(bytes_data), self.__loop)
         op.buffer = bytes_data
         return (yield from op)
 
     @asyncio.coroutine
-    def fsync(self, priority: int=0):
-        return (yield from self.OPERATION_CLASS(self.IO_NOP, self.__fileno, 0, 0, priority, self.__loop))
+    def fsync(self):
+        return (yield from self.OPERATION_CLASS(self.IO_NOP, self.__fileno, 0, 0, self.__loop))
