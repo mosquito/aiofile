@@ -14,15 +14,20 @@ except ImportError:
 @pytest.yield_fixture()
 def loop():
     loop = asyncio.new_event_loop()
-    yield loop
-    loop.close()
+
+    try:
+        yield loop
+    finally:
+        loop.close()
 
 
 @pytest.yield_fixture()
 def temp_file():
     temp = NamedTemporaryFile()
-    yield temp.name
-    temp.close()
+    try:
+        yield temp.name
+    finally:
+        temp.close()
 
 
 @pytest.fixture()
