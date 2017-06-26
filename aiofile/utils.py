@@ -1,6 +1,6 @@
 import asyncio
 import sys
-
+from .aio import AIOFile
 
 PY_35 = sys.version_info >= (3, 5)
 
@@ -51,3 +51,59 @@ class Writer:
     def __call__(self, data):
         yield from self.__aio_file.write(data, self.__offset)
         self.__offset += len(data)
+
+
+class FileWrapper:
+    __slots__ = '__file', '__loop', '__offset', '__lock'
+
+    CHUNK_SIZE = 32 * 1024
+
+    def __init__(self, filename: str, mode: str = "r", access_mode: int = 0o644, loop=None):
+        self.__loop = loop or asyncio.get_event_loop()
+        self.__file = AIOFile(filename, mode, access_mode, self.__loop)
+        self.__offset = 0
+        self.__lock = asyncio.Lock(loop=self.__loop)
+
+    @asyncio.coroutine
+    def read(self, size=None):
+        with (yield from self.__lock):
+            data = yield from self.__file.read(size, offset=self.__offset)
+            self.__offset += len(data)
+
+        return data
+
+    @asyncio.coroutine
+    def write(self, data):
+        with (yield from self.__lock):
+            yield from self.__aio_file.write(data, self.__offset)
+            self.__offset += len(data)
+
+    @asyncio.coroutine
+    def tell(self):
+        return self.__offset
+
+    @asyncio.coroutine
+    def seek(self, value):
+        self.__offset = value
+
+    @asyncio.coroutine
+    def close(self):
+        self.__file.close()
+
+    def __del__(self):
+        self.__file.close()
+
+    if PY_35:
+        @asyncio.coroutine
+        def __anext__(self):
+            return self
+
+        @asyncio.coroutine
+        def __aexit__(self, exc_type, exc_val, exc_tb):
+            yield from self.close()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.__file.close()
