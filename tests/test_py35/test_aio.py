@@ -152,12 +152,6 @@ async def test_parallel_writer_ordering(aio_file_maker, loop, temp_file, uuid):
     count = 1000
     chunk_size = 1024
 
-    def split_by(seq, n):
-        seq = seq
-        while seq:
-            yield seq[:n]
-            seq = seq[n:]
-
     data = os.urandom(chunk_size * count)
 
     futures = list()
