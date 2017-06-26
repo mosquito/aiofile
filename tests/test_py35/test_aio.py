@@ -1,4 +1,5 @@
-from aiofile import AIOFile
+import os
+from random import shuffle
 from aiofile.utils import Reader, Writer
 from aiofile.posix_aio import AIOOperation, IO_WRITE, IO_NOP, IO_READ
 from .. import *
@@ -13,8 +14,8 @@ def posix_aio_file(name, mode):
     return AIOFile(name, mode)
 
 
-@pytest.mark.asyncio
-async def test_read(temp_file, uuid):
+@aio_impl
+async def test_read(aio_file_maker, temp_file, uuid):
     with open(temp_file, "w") as f:
         f.write(uuid)
 
@@ -26,8 +27,8 @@ async def test_read(temp_file, uuid):
     assert data == uuid
 
 
-@pytest.mark.asyncio
-async def test_read_write(temp_file, uuid):
+@aio_impl
+async def test_read_write(aio_file_maker, temp_file, uuid):
     r_file = posix_aio_file(temp_file, 'r')
     w_file = posix_aio_file(temp_file, 'w')
 
@@ -40,8 +41,8 @@ async def test_read_write(temp_file, uuid):
     assert data == uuid
 
 
-@pytest.mark.asyncio
-async def test_read_offset(temp_file, uuid):
+@aio_impl
+async def test_read_offset(aio_file_maker, temp_file, uuid):
     with open(temp_file, "w") as f:
         for _ in range(10):
             f.write(uuid)
@@ -58,8 +59,8 @@ async def test_read_offset(temp_file, uuid):
     assert data == uuid
 
 
-@pytest.mark.asyncio
-async def test_read_write_offset(temp_file, uuid):
+@aio_impl
+async def test_read_write_offset(aio_file_maker, temp_file, uuid):
     r_file = posix_aio_file(temp_file, 'r')
     w_file = posix_aio_file(temp_file, 'w')
 
@@ -78,8 +79,8 @@ async def test_read_write_offset(temp_file, uuid):
     assert data == uuid
 
 
-@pytest.mark.asyncio
-async def test_reader_writer(temp_file, uuid):
+@aio_impl
+async def test_reader_writer(aio_file_maker, temp_file, uuid):
     r_file = posix_aio_file(temp_file, 'r')
     w_file = posix_aio_file(temp_file, 'w')
 
@@ -99,8 +100,8 @@ async def test_reader_writer(temp_file, uuid):
     assert count == 100
 
 
-@pytest.mark.asyncio
-async def test_reader_writer(loop, temp_file, uuid):
+@aio_impl
+async def test_reader_writer(aio_file_maker, loop, temp_file, uuid):
     r_file = posix_aio_file(temp_file, 'r')
     w_file = posix_aio_file(temp_file, 'w')
 
@@ -115,17 +116,19 @@ async def test_reader_writer(loop, temp_file, uuid):
         assert chunk.decode() == uuid
 
 
-@pytest.mark.asyncio
-async def test_parallel_writer(temp_file, uuid):
+@aio_impl
+async def test_parallel_writer(aio_file_maker, loop, temp_file, uuid):
     w_file = posix_aio_file(temp_file, 'w')
     r_file = posix_aio_file(temp_file, 'r')
 
     futures = list()
 
-    for i in range(2000):
-        futures.append(w_file.write(uuid, i * len(uuid), 0))
+    for i in range(1000):
+        futures.append(w_file.write(uuid, i * len(uuid)))
 
-    await asyncio.wait(futures)
+    shuffle(futures)
+
+    await asyncio.gather(*futures)
     await w_file.fsync()
 
     count = 0
@@ -138,4 +141,42 @@ async def test_parallel_writer(temp_file, uuid):
         assert chunk.decode() == uuid
         count += 1
 
-    assert count == 2000
+    assert count == 1000
+
+
+@aio_impl
+async def test_parallel_writer_ordering(aio_file_maker, loop, temp_file, uuid):
+    w_file = posix_aio_file(temp_file, 'w')
+    r_file = posix_aio_file(temp_file, 'r')
+
+    count = 1000
+    chunk_size = 1024
+
+    def split_by(seq, n):
+        seq = seq
+        while seq:
+            yield seq[:n]
+            seq = seq[n:]
+
+    data = os.urandom(chunk_size * count)
+
+    futures = list()
+
+    for idx, chunk in enumerate(split_by(data, chunk_size)):
+        futures.append(w_file.write(chunk, idx * chunk_size))
+
+    shuffle(futures)
+
+    await asyncio.gather(*futures)
+    await w_file.fsync()
+
+    result = b''
+
+    async for chunk in Reader(r_file, chunk_size=chunk_size):
+        if not chunk:
+            break
+
+        result += chunk
+
+    assert data == result
+

@@ -6,18 +6,17 @@ PY_35 = sys.version_info >= (3, 5)
 
 
 class Reader:
-    __slots__ = '__chunk_size', '__offset', '__aio_file', '__priority'
+    __slots__ = '__chunk_size', '__offset', '__aio_file'
 
-    def __init__(self, aio_file, offset: int = 0, chunk_size: int = 32 * 1024, priority: int = 0):
+    def __init__(self, aio_file, offset: int = 0, chunk_size: int = 32 * 1024):
         self.__chunk_size = int(chunk_size)
         self.__offset = int(offset)
         self.__aio_file = aio_file
-        self.__priority = int(priority)
 
     if PY_35:
         @asyncio.coroutine
         def __anext__(self):
-            chunk = yield from self.__aio_file.read(self.__chunk_size, self.__offset, self.__priority)
+            chunk = yield from self.__aio_file.read(self.__chunk_size, self.__offset)
             chunk_size = len(chunk)
             self.__offset += chunk_size
 
@@ -31,7 +30,7 @@ class Reader:
 
     @asyncio.coroutine
     def __next__(self):
-        chunk = yield from self.__aio_file.read(self.__chunk_size, self.__offset, self.__priority)
+        chunk = yield from self.__aio_file.read(self.__chunk_size, self.__offset)
         chunk_size = len(chunk)
         self.__offset += chunk_size
 
@@ -42,14 +41,13 @@ class Reader:
 
 
 class Writer:
-    __slots__ = '__chunk_size', '__offset', '__aio_file', '__priority'
+    __slots__ = '__chunk_size', '__offset', '__aio_file'
 
-    def __init__(self, aio_file, offset: int = 0, priority: int = 0):
+    def __init__(self, aio_file, offset: int = 0):
         self.__offset = int(offset)
         self.__aio_file = aio_file
-        self.__priority = int(priority)
 
     @asyncio.coroutine
     def __call__(self, data):
-        yield from self.__aio_file.write(data, self.__offset, self.__priority)
+        yield from self.__aio_file.write(data, self.__offset)
         self.__offset += len(data)

@@ -1,6 +1,7 @@
 from cpython cimport bytes, bool
 from libc.errno cimport EAGAIN, EBADF, EINVAL, ENOSYS, EOVERFLOW, errno
 from libc.stdlib cimport calloc, free
+from libc.stdint cimport uint32_t
 from libc.string cimport memcpy, strerror
 from posix.fcntl cimport O_DSYNC
 from posix.signal cimport sigevent
@@ -14,7 +15,6 @@ from errno import errorcode
 
 cdef extern from *:
     ctypedef int vvoid "volatile void"
-
 
 cdef extern from "<aio.h>" nogil:
 
@@ -40,8 +40,8 @@ cdef extern from "<aio.h>" nogil:
     cdef int aio_fsync(int op, aiocb *aiocbp)
     cdef int aio_error(const aiocb *aiocbp)
     cdef ssize_t aio_return(aiocb *aiocbp)
+    cdef int aio_cancel(int fd, aiocb *aiocbp)
     # cdef int aio_suspend(const aiocb * const aiocb_list[], int nitems, const timespec *timeout)
-    # cdef int aio_cancel(int fd, aiocb *aiocbp)
     # cdef int lio_listio(int mode, aiocb *const aiocb_list[], int nitems, sigevent *sevp)
 
 
@@ -117,8 +117,33 @@ cdef dict AIO_FSYNC_ERRORS = {
 }
 
 
-class SystemLimitationError(ResourceWarning):
-    pass
+cdef class SimpleSemaphore:
+    cdef uint32_t value
+    cdef uint32_t max_value
+
+    def __cinit__(self, uint32_t max_value):
+        self.value = 0
+        self.max_value = max_value
+
+    def acquire(self):
+        yield
+
+        while True:
+            if self.value + 1 > self.max_value:
+                yield
+            else:
+                self.value += 1
+                return
+
+    cpdef set_max_value(self):
+        self.max_value = self.value - 1
+
+    cpdef release(self):
+        if self.value > 0:
+            self.value -= 1
+
+
+cdef object semaphore = SimpleSemaphore(2 ** 31)
 
 
 cdef class AIOOperation:
@@ -126,10 +151,13 @@ cdef class AIOOperation:
     cdef char* __buffer
     cdef unsigned int size
     cdef int __state
+    cdef object loop
 
-    def __cinit__(self, int opcode, int fd, off_t offset, int nbytes, int reqprio, loop):
+    def __cinit__(self, int opcode, int fd, off_t offset, int nbytes, loop):
         if opcode not in (LIO_READ, LIO_WRITE, LIO_NOP):
             raise ValueError("Invalid state")
+
+        self.loop = loop
 
         with nogil:
             self.__state = AIO_OP_INIT
@@ -143,7 +171,7 @@ cdef class AIOOperation:
             self.cb.aio_fildes = fd
             self.cb.aio_offset = offset
             self.cb.aio_nbytes = nbytes
-            self.cb.aio_reqprio = reqprio
+            self.cb.aio_reqprio = 0
             self.cb.aio_lio_opcode = opcode
             self.cb.aio_sigevent.sigev_notify = SIGEV_TYPE
 
@@ -191,15 +219,6 @@ cdef class AIOOperation:
         if result == 0:
             return
 
-        if error == EINVAL:
-            raise SystemLimitationError(
-                errorcode[error],
-                AIO_WRITE_ERRORS.get(
-                    error,
-                    strerror(error).decode()
-                )
-            )
-
         raise SystemError(
             errorcode[error],
             AIO_READ_ERRORS.get(
@@ -217,6 +236,7 @@ cdef class AIOOperation:
 
             if result != 0:
                 result = aio_error(self.cb)
+
             if result != 0:
                 error = result
 
@@ -224,15 +244,6 @@ cdef class AIOOperation:
 
         if result == 0:
             return
-
-        if error == EINVAL:
-            raise SystemLimitationError(
-                errorcode[error],
-                AIO_WRITE_ERRORS.get(
-                    error,
-                    strerror(error).decode()
-                )
-            )
 
         raise SystemError(
             errorcode[error],
@@ -251,6 +262,7 @@ cdef class AIOOperation:
 
             if result != 0:
                 result = aio_error(self.cb)
+
             if result != 0:
                 error = result
 
@@ -258,15 +270,6 @@ cdef class AIOOperation:
 
         if result == 0:
             return
-
-        if error == EINVAL:
-            raise SystemLimitationError(
-                errorcode[error],
-                AIO_WRITE_ERRORS.get(
-                    error,
-                    strerror(error).decode()
-                )
-            )
 
         raise SystemError(
             errorcode[error],
@@ -276,56 +279,68 @@ cdef class AIOOperation:
             )
         )
 
+    cpdef aio_cancel(self):
+        aio_cancel(self.cb.aio_fildes, self.cb)
+
     def __iter__(self):
-        if self.done():
-            raise RuntimeError("Operation already done")
-
-        if self.is_running():
-            raise RuntimeError("Operation already in progress")
-
-        self.__state = AIO_OP_RUN
-
         cdef int result = 0
         cdef int error = 0
 
-        # Switch context before execution
-        yield
+        try:
+            yield from semaphore.acquire()
 
-        while True:
-            try:
-                if self.cb.aio_lio_opcode == LIO_READ:
-                    self.aio_read()
-                elif self.cb.aio_lio_opcode == LIO_WRITE:
-                    self.aio_write()
-                elif self.cb.aio_lio_opcode == LIO_NOP:
-                    self.aio_fsync()
-                break
-            except SystemLimitationError:
-                yield
+            if self.done():
+                raise RuntimeError("Operation already done")
 
-        # Awaiting callback when SIGEV_THREAD  (Linux)
-        if self.cb.aio_sigevent.sigev_notify == SIGEV_THREAD:
-            while self.__state != AIO_OP_DONE:
-                yield
+            if self.is_running():
+                raise RuntimeError("Operation already in progress")
 
-        # Polling aio_error when SIGEV_NONE (Mac OS X)
-        elif self.cb.aio_sigevent.sigev_notify == SIGEV_NONE:
+            self.__state = AIO_OP_RUN
+
+            # Trying to detect maximum concurrent AIO operations
             while True:
+                try:
+                    if self.cb.aio_lio_opcode == LIO_READ:
+                        self.aio_read()
+                    elif self.cb.aio_lio_opcode == LIO_WRITE:
+                        self.aio_write()
+                    elif self.cb.aio_lio_opcode == LIO_NOP:
+                        self.aio_fsync()
 
-                with nogil:
-                    result = aio_error(self.cb)
-                    error = errno
-
-                if result == 0:
-                    self.__state = AIO_OP_DONE
                     break
-                elif result == -1:
-                    raise SystemError(errorcode[error], strerror(error).decode())
-                else:
+                except SystemError as e:
+                    if e.args[0] == 'EINVAL':
+                        semaphore.release()
+                        semaphore.set_max_value()
+                        yield from semaphore.acquire()
+                    else:
+                        raise
+
+            # Awaiting callback when SIGEV_THREAD  (Linux)
+            if self.cb.aio_sigevent.sigev_notify == SIGEV_THREAD:
+                while self.__state != AIO_OP_DONE:
                     yield
 
-        self.size = aio_return(self.cb)
-        return self.buffer
+            # Polling aio_error when SIGEV_NONE (Mac OS X)
+            elif self.cb.aio_sigevent.sigev_notify == SIGEV_NONE:
+                while True:
+
+                    with nogil:
+                        result = aio_error(self.cb)
+                        error = errno
+
+                    if result == 0:
+                        self.__state = AIO_OP_DONE
+                        break
+                    elif result == -1:
+                        raise SystemError(errorcode[error], strerror(error).decode())
+                    else:
+                        yield
+
+            self.size = aio_return(self.cb)
+            return self.buffer
+        finally:
+            semaphore.release()
 
     cpdef bool done(self):
         return self.__state == AIO_OP_DONE
