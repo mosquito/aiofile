@@ -56,3 +56,10 @@ def aio_impl(func):
         lst.append(posix_aio_file)
 
     return pytest.mark.parametrize("aio_file_maker", lst)(pytest.mark.asyncio(func))
+
+
+def split_by(seq, n):
+    seq = seq
+    while seq:
+        yield seq[:n]
+        seq = seq[n:]

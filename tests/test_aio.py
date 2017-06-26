@@ -1,3 +1,4 @@
+import os
 from random import shuffle
 
 from aiofile.utils import Reader, Writer
@@ -120,3 +121,36 @@ def test_parallel_writer(aio_file_maker, temp_file, uuid):
         count += 1
 
     assert count == 1000
+
+
+@aio_impl
+def test_parallel_writer_ordering(aio_file_maker, loop, temp_file, uuid):
+    w_file = posix_aio_file(temp_file, 'w')
+    r_file = posix_aio_file(temp_file, 'r')
+
+    count = 1000
+    chunk_size = 1024
+
+    data = os.urandom(chunk_size * count)
+
+    futures = list()
+
+    for idx, chunk in enumerate(split_by(data, chunk_size)):
+        futures.append(w_file.write(chunk, idx * chunk_size))
+
+    shuffle(futures)
+
+    yield from asyncio.gather(*futures)
+    yield from w_file.fsync()
+
+    result = b''
+
+    for async_chunk in Reader(r_file, chunk_size=chunk_size):
+        chunk = yield from async_chunk
+
+        if not chunk:
+            break
+
+        result += chunk
+
+    assert data == result
