@@ -52,7 +52,7 @@ setup(
     author_email=module.team_email,
     provides=["aiofile"],
     build_requires=['cython'],
-    keywords="aio, python, asyncio, cython",
+    keywords=["aio", "python", "asyncio", "cython", "fileio", "io"],
     classifiers=[
         'Development Status :: 4 - Beta',
         'Environment :: Console',
