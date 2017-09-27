@@ -8,6 +8,7 @@ from posix.signal cimport sigevent
 from posix.signal cimport sigval, SIGEV_THREAD, SIGEV_NONE
 from posix.types cimport off_t
 
+import asyncio
 import platform
 import logging
 from errno import errorcode
@@ -72,9 +73,14 @@ cdef enum:
     AIO_OP_CLOSED,
 
 
-cdef void on_event(sigval sv):
-    cdef int* val = <int*>sv.sival_ptr
-    val[0] = AIO_OP_DONE
+ctypedef void (*result_cb)()
+
+
+cdef void on_event(sigval sv) with gil:
+    cdef unsigned long long* val = <unsigned long long*>sv.sival_ptr
+    op = OP_MAP[val[0]]
+    op._set_result()
+
 
 
 cdef dict AIO_READ_ERRORS = {
@@ -146,18 +152,35 @@ cdef class SimpleSemaphore:
 cdef object semaphore = SimpleSemaphore(2 ** 31)
 
 
+cpdef create_future(loop):
+    try:
+        return loop.create_future()
+    except AttributeError:
+        return asyncio.Future(loop=loop)
+
+
+cdef dict OP_MAP = dict()
+
+
 cdef class AIOOperation:
     cdef aiocb* cb
     cdef char* __buffer
     cdef unsigned int size
     cdef int __state
+    cdef unsigned long long cid
     cdef object loop
+    cdef object _result
+
+    cpdef _set_result(self):
+        self.loop.call_soon_threadsafe(self._result.set_result, None)
 
     def __cinit__(self, int opcode, int fd, off_t offset, int nbytes, loop):
         if opcode not in (LIO_READ, LIO_WRITE, LIO_NOP):
             raise ValueError("Invalid state")
 
         self.loop = loop
+        self._result = create_future(loop)
+        self.cid = id(self)
 
         with nogil:
             self.__state = AIO_OP_INIT
@@ -175,9 +198,10 @@ cdef class AIOOperation:
             self.cb.aio_lio_opcode = opcode
             self.cb.aio_sigevent.sigev_notify = SIGEV_TYPE
 
-            if SIGEV_TYPE == SIGEV_THREAD:
-                self.cb.aio_sigevent.sigev_notify_function = on_event
-                self.cb.aio_sigevent.sigev_value.sival_ptr = &self.__state
+        if SIGEV_TYPE == SIGEV_THREAD:
+            self.cb.aio_sigevent.sigev_notify_function = on_event
+            self.cb.aio_sigevent.sigev_value.sival_ptr = <void*>&self.cid
+            OP_MAP[self.cid] = self
 
     @property
     def buffer(self):
@@ -318,8 +342,7 @@ cdef class AIOOperation:
 
             # Awaiting callback when SIGEV_THREAD  (Linux)
             if self.cb.aio_sigevent.sigev_notify == SIGEV_THREAD:
-                while self.__state != AIO_OP_DONE:
-                    yield
+                yield from self._result
 
             # Polling aio_error when SIGEV_NONE (Mac OS X)
             elif self.cb.aio_sigevent.sigev_notify == SIGEV_NONE:
@@ -366,6 +389,9 @@ cdef class AIOOperation:
 
     def __dealloc__(self):
         self.close()
+
+        if self.cid in OP_MAP:
+            del OP_MAP[self.cid]
 
     @property
     def fileno(self):

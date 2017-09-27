@@ -54,7 +54,7 @@ Totally async read and write:
 
         await aio_file.write(b"Hello ")
         await aio_file.write(b"world", offset=7)
-        await aio_file.flush()
+        await aio_file.fsync()
 
         print(await aio_file.read())
 
