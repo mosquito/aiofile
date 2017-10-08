@@ -22,7 +22,7 @@ if platform in ('linux', 'darwin'):
                 ["aiofile/posix_aio.pyx"],
                 libraries=libraries,
             ),
-        ], force=True, emit_linenums=False)
+        ], force=True, emit_linenums=False, quiet=True)
 
     except ImportError:
         extensions = [
