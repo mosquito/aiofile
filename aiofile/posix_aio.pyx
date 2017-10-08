@@ -78,8 +78,11 @@ ctypedef void (*result_cb)()
 
 cdef void on_event(sigval sv) with gil:
     cdef unsigned long long* val = <unsigned long long*>sv.sival_ptr
-    op = OP_MAP[val[0]]
-    op._set_result()
+
+    op = OP_MAP.pop(val[0], None)
+
+    if op:
+        op._set_result()
 
 
 
@@ -389,9 +392,7 @@ cdef class AIOOperation:
 
     def __dealloc__(self):
         self.close()
-
-        if self.cid in OP_MAP:
-            del OP_MAP[self.cid]
+        OP_MAP.pop(self.cid, None)
 
     @property
     def fileno(self):
