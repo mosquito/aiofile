@@ -55,7 +55,7 @@ class AIOFile:
         return "<AIOFile: %r>" % self.__fname
 
     def close(self):
-        if self.__fileno == -2:
+        if self.__fileno < 0:
             return
 
         os.close(self.__fileno)
