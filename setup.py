@@ -75,4 +75,14 @@ setup(
         'Topic :: System',
         'Topic :: System :: Operating System',
     ],
+    python_requires=">3.4.*, <4",
+    extras_require={
+        'develop': [
+            'Cython',
+            'pytest',
+            'pytest-cov',
+            'pytest-asyncio<0.6',
+        ],
+        ':python_version < "3.5"': 'typing >= 3.5.3',
+    },
 )
