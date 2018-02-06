@@ -164,7 +164,8 @@ async def test_non_existent_file(aio_file_maker, loop, temp_file, uuid):
 
 
 @aio_impl
-async def test_non_existent_file_ctx(aio_file_maker, loop, temp_file, uuid):
+@asyncio.coroutine
+def test_non_existent_file_ctx(aio_file_maker, loop, temp_file, uuid):
     with pytest.raises(FileNotFoundError):
         with aio_file_maker("/c/windows/NonExistent.file", 'r'):
-            pass
+            yield 

@@ -174,10 +174,3 @@ async def test_parallel_writer_ordering(aio_file_maker, loop, temp_file, uuid):
         result += chunk
 
     assert data == result
-
-
-@aio_impl
-async def test_non_existent_file_ctx(aio_file_maker, loop, temp_file, uuid):
-    with pytest.raises(FileNotFoundError):
-        async with aio_file_maker("/c/windows/NonExistent.file", 'r'):
-            pass

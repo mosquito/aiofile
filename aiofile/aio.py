@@ -45,6 +45,7 @@ class AIOFile:
         self.__mode = mode
         self.__access_mode = access_mode
 
+        self.__fileno = -1
         self.__fileno = os.open(
             self.__fname,
             flags=mode_to_flags(self.__mode),
