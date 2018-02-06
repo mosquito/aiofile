@@ -158,6 +158,7 @@ def test_parallel_writer_ordering(aio_file_maker, loop, temp_file, uuid):
 
 
 @aio_impl
+@asyncio.coroutine
 def test_non_existent_file(aio_file_maker):
     with pytest.raises(FileNotFoundError):
         aio_file_maker("/c/windows/NonExistent.file", 'r')
