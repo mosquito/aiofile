@@ -1,38 +1,10 @@
 import pytest
-import asyncio
-from uuid import uuid4
-from tempfile import NamedTemporaryFile
-
 from aiofile import AIOFile, thread_aio
 
 try:
     from aiofile import posix_aio
 except ImportError:
     posix_aio = None
-
-
-@pytest.yield_fixture()
-def loop():
-    loop = asyncio.new_event_loop()
-
-    try:
-        yield loop
-    finally:
-        loop.close()
-
-
-@pytest.yield_fixture()
-def temp_file():
-    temp = NamedTemporaryFile()
-    try:
-        yield temp.name
-    finally:
-        temp.close()
-
-
-@pytest.fixture()
-def uuid():
-    return str(uuid4())
 
 
 if posix_aio:
@@ -60,7 +32,11 @@ def aio_impl(func):
     if posix_aio:
         lst.append(posix_aio_file)
 
-    return pytest.mark.parametrize("aio_file_maker", lst)(pytest.mark.asyncio(func))
+    return pytest.mark.parametrize(
+        "aio_file_maker", lst
+    )(
+        pytest.mark.asyncio(func)
+    )
 
 
 def split_by(seq, n):

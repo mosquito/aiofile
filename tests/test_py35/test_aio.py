@@ -1,4 +1,5 @@
 import os
+import asyncio
 from random import shuffle
 from aiofile.utils import Reader, Writer
 from aiofile.posix_aio import AIOOperation, IO_WRITE, IO_NOP, IO_READ
@@ -174,3 +175,9 @@ async def test_parallel_writer_ordering(aio_file_maker, loop, temp_file, uuid):
 
     assert data == result
 
+
+@aio_impl
+async def test_non_existent_file_ctx(aio_file_maker, loop, temp_file, uuid):
+    with pytest.raises(FileNotFoundError):
+        async with aio_file_maker("/c/windows/NonExistent.file", 'r'):
+            pass

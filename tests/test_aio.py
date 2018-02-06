@@ -1,4 +1,5 @@
 import os
+import asyncio
 from random import shuffle
 
 from aiofile.utils import Reader, Writer
