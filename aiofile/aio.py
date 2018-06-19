@@ -12,7 +12,7 @@ except ImportError:
 
 MODE_MAPPING = (
     ("x", (os.O_EXCL,)),
-    ("r", (os.O_RDONLY,)),
+    ("r", (os.O_RDONLY, os.O_RDWR)),
     ("a", (os.O_APPEND, os.O_CREAT)),
     ("w", (os.O_RDWR, os.O_TRUNC, os.O_CREAT)),
     ("+", (os.O_RDWR,)),
@@ -28,6 +28,7 @@ ReadResultType = Generator[Any, None, Union[bytes, str]]
 def run_in_thread(func, *args, **kwargs) -> asyncio.Future:
     loop = kwargs.pop('loop')       # type: asyncio.AbstractEventLoop
     assert not loop.is_closed(), "Event loop is closed"
+    assert loop.is_running(), "Event loop is not running"
 
     return loop.run_in_executor(None, partial(func, *args, **kwargs))
 
@@ -205,8 +206,8 @@ class AIOFile:
             raise asyncio.InvalidStateError('AIOFile closed')
 
         return run_in_thread(
-            os.truncate,
-            self.__fname,
+            os.ftruncate,
+            self.__fileno,
             length,
             loop=self.__loop
         )

@@ -98,7 +98,7 @@ async def test_reader_writer(aio_file_maker, temp_file, uuid):
 
 
 @aio_impl
-async def test_reader_writer(aio_file_maker, loop, temp_file, uuid):
+async def test_reader_writer(aio_file_maker, temp_file, uuid):
     r_file = await aio_file_maker(temp_file, 'r')
     w_file = await aio_file_maker(temp_file, 'w')
 
@@ -114,7 +114,7 @@ async def test_reader_writer(aio_file_maker, loop, temp_file, uuid):
 
 
 @aio_impl
-async def test_parallel_writer(aio_file_maker, loop, temp_file, uuid):
+async def test_parallel_writer(aio_file_maker, temp_file, uuid):
     w_file = await aio_file_maker(temp_file, 'w')
     r_file = await aio_file_maker(temp_file, 'r')
 
@@ -137,7 +137,7 @@ async def test_parallel_writer(aio_file_maker, loop, temp_file, uuid):
 
 
 @aio_impl
-async def test_parallel_writer_ordering(aio_file_maker, loop, temp_file, uuid):
+async def test_parallel_writer_ordering(aio_file_maker, temp_file, uuid):
     w_file = await aio_file_maker(temp_file, 'wb')
     r_file = await aio_file_maker(temp_file, 'rb')
 
@@ -172,7 +172,7 @@ async def test_non_existent_file_ctx(aio_file_maker):
 
 
 @aio_impl
-async def test_line_reader(aio_file_maker, loop, temp_file, uuid):
+async def test_line_reader(aio_file_maker, temp_file, uuid):
     afp = await aio_file_maker(temp_file, 'w+')
 
     writer = Writer(afp)
@@ -192,7 +192,7 @@ async def test_line_reader(aio_file_maker, loop, temp_file, uuid):
 
 
 @aio_impl
-async def test_line_reader_one_line(aio_file_maker, loop, temp_file):
+async def test_line_reader_one_line(aio_file_maker, temp_file):
     afp = await aio_file_maker(temp_file, 'w+')
 
     writer = Writer(afp)
@@ -207,3 +207,34 @@ async def test_line_reader_one_line(aio_file_maker, loop, temp_file):
         read_lines.append(line)
 
     assert payload == read_lines[0]
+
+
+@aio_impl
+async def test_truncate(aio_file_maker, temp_file):
+    afp = await aio_file_maker(temp_file, 'w+')
+
+    await afp.write('hello')
+    await afp.fsync()
+
+    assert (await afp.read()) == 'hello'
+
+    await afp.truncate(0)
+
+    assert (await afp.read()) == ''
+
+
+@aio_impl
+async def test_modes(aio_file_maker, event_loop, tmpdir):
+    tmpfile = tmpdir.join('test.txt')
+
+    async with aio_file_maker(tmpfile, 'w', loop=event_loop) as afp:
+        await afp.write('foo')
+
+    async with aio_file_maker(tmpfile, 'r', loop=event_loop) as afp:
+        assert (await afp.read()) == 'foo'
+
+    async with aio_file_maker(tmpfile, 'a+', loop=event_loop) as afp:
+        assert (await afp.read()) == 'foo'
+
+    async with aio_file_maker(tmpfile, 'r+', loop=event_loop) as afp:
+        assert (await afp.read()) == 'foo'

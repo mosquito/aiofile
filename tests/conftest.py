@@ -6,8 +6,9 @@ from tempfile import NamedTemporaryFile
 
 
 @pytest.yield_fixture()
-def loop():
+def event_loop():
     loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
 
     try:
         yield loop

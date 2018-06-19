@@ -118,7 +118,7 @@ def test_parallel_writer(aio_file_maker, temp_file, uuid):
 
 
 @aio_impl
-def test_parallel_writer_ordering(aio_file_maker, loop, temp_file, uuid):
+def test_parallel_writer_ordering(aio_file_maker, temp_file, uuid):
     w_file = yield from aio_file_maker(temp_file, 'wb')
     r_file = yield from aio_file_maker(temp_file, 'rb')
 
@@ -158,7 +158,7 @@ def test_non_existent_file(aio_file_maker):
 
 
 @aio_impl
-def test_line_reader(aio_file_maker, loop, temp_file, uuid):
+def test_line_reader(aio_file_maker, temp_file, uuid):
     afp = yield from aio_file_maker(temp_file, 'w+')
 
     writer = Writer(afp)
@@ -183,7 +183,7 @@ def test_line_reader(aio_file_maker, loop, temp_file, uuid):
 
 
 @aio_impl
-def test_line_reader_one_line(aio_file_maker, loop, temp_file):
+def test_line_reader_one_line(aio_file_maker, temp_file):
     afp = yield from aio_file_maker(temp_file, 'w+')
 
     writer = Writer(afp)
@@ -203,3 +203,34 @@ def test_line_reader_one_line(aio_file_maker, loop, temp_file):
         read_lines.append(line)
 
     assert payload == read_lines[0]
+
+
+@aio_impl
+def test_truncate(aio_file_maker, temp_file):
+    afp = yield from aio_file_maker(temp_file, 'w+')
+
+    yield from afp.write('hello')
+    yield from afp.fsync()
+
+    assert (yield from afp.read()) == 'hello'
+
+    yield from afp.truncate(0)
+
+    assert (yield from afp.read()) == ''
+
+
+@aio_impl
+def test_modes(aio_file_maker, event_loop, tmpdir):
+    tmpfile = tmpdir.join('test.txt')
+
+    afp = yield from aio_file_maker(tmpfile, 'w', loop=event_loop)
+    yield from afp.write('foo')
+
+    afp = yield from aio_file_maker(tmpfile, 'r', loop=event_loop)
+    assert (yield from afp.read()) == 'foo'
+
+    afp = yield from aio_file_maker(tmpfile, 'a+', loop=event_loop)
+    assert (yield from afp.read()) == 'foo'
+
+    afp = yield from aio_file_maker(tmpfile, 'r+', loop=event_loop)
+    assert (yield from afp.read()) == 'foo'

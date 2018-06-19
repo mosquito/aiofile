@@ -8,22 +8,22 @@ except ImportError:
 
 
 if posix_aio:
-    def posix_aio_file(name, mode):
+    def posix_aio_file(name, mode, **kwargs):
         AIOFile.OPERATION_CLASS = posix_aio.AIOOperation
         AIOFile.IO_READ = posix_aio.IO_READ
         AIOFile.IO_NOP = posix_aio.IO_NOP
         AIOFile.IO_WRITE = posix_aio.IO_WRITE
 
-        return AIOFile(name, mode)
+        return AIOFile(name, mode, **kwargs)
 
 
-def thread_aio_file(name, mode):
+def thread_aio_file(name, mode, **kwargs):
     AIOFile.OPERATION_CLASS = thread_aio.ThreadedAIOOperation
     AIOFile.IO_READ = thread_aio.IO_READ
     AIOFile.IO_NOP = thread_aio.IO_NOP
     AIOFile.IO_WRITE = thread_aio.IO_WRITE
 
-    return AIOFile(name, mode)
+    return AIOFile(name, mode, **kwargs)
 
 
 def aio_impl(func):
