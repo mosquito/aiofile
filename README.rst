@@ -50,7 +50,7 @@ Totally async read and write:
     from aiofile import AIOFile, Reader, Writer
 
     async def main(loop):
-        aio_file = await aio_open("/tmp/hello.txt", 'w+', loop=loop)
+        aio_file = await AIOFile("/tmp/hello.txt", 'w+', loop=loop)
 
         await aio_file.write(b"Hello ")
         await aio_file.write(b"world", offset=7)
@@ -67,10 +67,10 @@ Write and read with helpers:
 .. code-block:: python
 
     import asyncio
-    from aiofile import aio_open, Reader, Writer
+    from aiofile import AIOFile, Reader, Writer
 
     async def main(loop):
-        aio_file = await aio_open("/tmp/hello.txt", 'w+', loop=loop)
+        aio_file = await AIOFile("/tmp/hello.txt", 'w+', loop=loop)
 
         writer = Writer(aio_file)
         reader = Reader(aio_file, chunk_size=8)
