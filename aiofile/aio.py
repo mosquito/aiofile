@@ -26,7 +26,9 @@ ReadResultType = Generator[Any, None, Union[bytes, str]]
 
 
 def run_in_thread(func, *args, **kwargs) -> asyncio.Future:
-    loop = kwargs.pop('loop')
+    loop = kwargs.pop('loop')       # type: asyncio.AbstractEventLoop
+    assert not loop.is_closed(), "Event loop is closed"
+
     return loop.run_in_executor(None, partial(func, *args, **kwargs))
 
 
@@ -83,7 +85,7 @@ class AIOFile:
 
     @property
     def loop(self):
-        return self.__binary
+        return self.__loop
 
     @asyncio.coroutine
     def open(self):
