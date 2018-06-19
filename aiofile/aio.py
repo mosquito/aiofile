@@ -10,10 +10,10 @@ except ImportError:
     )
 
 MODE_MAPPING = (
+    ("x", (os.O_EXCL,)),
     ("r", (os.O_RDONLY,)),
-    ("w", (os.O_CREAT, os.O_WRONLY)),
-    ("x", (os.O_CREAT, os.O_EXCL)),
-    ("a", (os.O_CREAT, os.O_APPEND)),
+    ("a", (os.O_APPEND, os.O_CREAT)),
+    ("w", (os.O_WRONLY, os.O_TRUNC, os.O_CREAT)),
     ("+", (os.O_RDWR,)),
 )
 
@@ -31,12 +31,13 @@ def mode_to_flags(mode: str):
         )
 
     flags = 0
-    flags |= os.O_NONBLOCK
 
     for m_mode, m_flags in MODE_MAPPING:
         if m_mode in mode:
             for flag in m_flags:
                 flags |= flag
+
+    flags |= os.O_NONBLOCK
 
     return flags
 
@@ -74,13 +75,6 @@ class AIOFile:
 
         if self.__fileno != AIO_FILE_NOT_OPENED:
             return
-
-        if 'w' in self.__mode:
-            yield from run_in_thread(
-                os.truncate,
-                self.__fname, 0,
-                loop=self.__loop,
-            )
 
         self.__fileno = yield from run_in_thread(
             os.open,
