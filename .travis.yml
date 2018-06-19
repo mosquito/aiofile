@@ -8,6 +8,4 @@ install:
   - pip install -Ue '.[develop]'
 script:
   - py.test --cov=aiofile tests
-  - pip install -U aiomisc
-  - py.test --cov=aiofile tests
   - pip uninstall -y .
