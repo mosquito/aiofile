@@ -221,7 +221,7 @@ def test_truncate(aio_file_maker, temp_file):
 
 @aio_impl
 def test_modes(aio_file_maker, event_loop, tmpdir):
-    tmpfile = tmpdir.join('test.txt')
+    tmpfile = str(tmpdir.join('test.txt'))
 
     afp = yield from aio_file_maker(tmpfile, 'w', loop=event_loop)
     yield from afp.write('foo')
