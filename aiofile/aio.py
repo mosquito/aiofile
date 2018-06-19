@@ -22,6 +22,14 @@ AIO_FILE_NOT_OPENED = -1
 AIO_FILE_CLOSED = -2
 
 
+ReadResultType = Generator[Any, None, Union[bytes, str]]
+
+
+def run_in_thread(func, *args, **kwargs) -> asyncio.Future:
+    loop = kwargs['loop']
+    return loop.run_in_executor(None, partial(func, *args, **kwargs))
+
+
 def mode_to_flags(mode: str):
     if len(set("awrb+") | set(mode)) > 5:
         raise ValueError('Invalid mode %s' % repr(mode))
@@ -125,9 +133,7 @@ class AIOFile:
         return self.__loop.create_task(self.close())
 
     @asyncio.coroutine
-    def read(
-                self, size: int=-1, offset: int=0
-            ) -> Generator[Any, None, Union[bytes, str]]:
+    def read(self, size: int=-1, offset: int=0) -> ReadResultType:
 
         if self.__fileno < 0:
             raise asyncio.InvalidStateError('AIOFile closed')
@@ -136,7 +142,13 @@ class AIOFile:
             raise ValueError("Unsupported value %d for size" % size)
 
         if size == -1:
-            size = (yield from run_in_thread(os.stat, self.__fileno)).st_size
+            size = (
+                yield from run_in_thread(
+                    os.stat,
+                    self.__fileno,
+                    loop=self.loop
+                )
+            ).st_size
 
         data = yield from self.OPERATION_CLASS(
             self.IO_READ,
@@ -196,8 +208,3 @@ class AIOFile:
             length,
             loop=self.__loop
         )
-
-
-def run_in_thread(func, *args, **kwargs) -> asyncio.Future:
-    loop = kwargs.pop('loop', None) or asyncio.get_event_loop()
-    return loop.run_in_executor(None, partial(func, *args, **kwargs))
