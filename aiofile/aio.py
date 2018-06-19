@@ -26,7 +26,7 @@ ReadResultType = Generator[Any, None, Union[bytes, str]]
 
 
 def run_in_thread(func, *args, **kwargs) -> asyncio.Future:
-    loop = kwargs['loop']
+    loop = kwargs.pop('loop')
     return loop.run_in_executor(None, partial(func, *args, **kwargs))
 
 
