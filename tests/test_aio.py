@@ -180,3 +180,26 @@ def test_line_reader(aio_file_maker, loop, temp_file, uuid):
         read_lines.append(line[:-1])
 
     assert lines == read_lines
+
+
+@aio_impl
+def test_line_reader_one_line(aio_file_maker, loop, temp_file):
+    afp = yield from aio_file_maker(temp_file, 'w+')
+
+    writer = Writer(afp)
+
+    payload = " ".join(uuid4().hex for _ in range(1000))
+
+    yield from writer(payload)
+
+    read_lines = []
+
+    for line_async in LineReader(afp):
+        line = yield from line_async
+
+        if not line:
+            break
+
+        read_lines.append(line)
+
+    assert payload == read_lines[0]

@@ -42,70 +42,81 @@ Features
 Code examples
 -------------
 
-Totally async read and write:
+All code examples requires python 3.5+.
+
+Write and Read
+++++++++++++++
 
 .. code-block:: python
 
     import asyncio
     from aiofile import AIOFile, Reader, Writer
 
-    async def main(loop):
-        aio_file = await AIOFile("/tmp/hello.txt", 'w+', loop=loop)
 
-        await aio_file.write(b"Hello ")
-        await aio_file.write(b"world", offset=7)
-        await aio_file.fsync()
+    async def main():
+        async with AIOFile("/tmp/hello.txt", 'w+') as afp:
+            await afp.write("Hello ")
+            await afp.write("world", offset=7)
+            await afp.fsync()
 
-        print(await aio_file.read())
+            print(await afp.read())
+
 
     loop = asyncio.get_event_loop()
-    loop.run_until_complete(main(loop))
+    loop.run_until_complete(main())
 
 
-Write and read with helpers:
-
-.. code-block:: python
-
-    import asyncio
-    from aiofile import AIOFile, Reader, Writer
-
-    async def main(loop):
-        aio_file = await AIOFile("/tmp/hello.txt", 'w+', loop=loop)
-
-        writer = Writer(aio_file)
-        reader = Reader(aio_file, chunk_size=8)
-
-        await writer(b"Hello")
-        await writer(b" ")
-        await writer(b"World")
-        await aio_file.flush()
-
-        async for chunk in reader:
-            print(chunk)
-
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(main(loop))
-
-
-or use async context manager:
+Write and read with helpers
++++++++++++++++++++++++++++
 
 .. code-block:: python
 
     import asyncio
     from aiofile import AIOFile, Reader, Writer
 
-    async def main(loop):
-        async with AIOFile("/tmp/hello.txt", 'w+', loop=loop) as aio_file:
-            writer = Writer(aio_file)
-            reader = Reader(aio_file, chunk_size=8)
 
-            await writer(b"Hello")
-            await writer(b" ")
-            await writer(b"World")
-            await aio_file.flush()
+    async def main():
+        async with AIOFile("/tmp/hello.txt", 'w+') as afp
+            writer = Writer(afp)
+            reader = Reader(afp, chunk_size=8)
+
+            await writer("Hello")
+            await writer(" ")
+            await writer("World")
+            await afp.flush()
 
             async for chunk in reader:
                 print(chunk)
 
+
     loop = asyncio.get_event_loop()
-    loop.run_until_complete(main(loop))
+    loop.run_until_complete(main())
+
+
+Read file line by line
+++++++++++++++++++++++
+
+.. code-block:: python
+
+    import asyncio
+    from aiofile import AIOFile, LineReader, Writer
+
+
+    async def main():
+        async with AIOFile("/tmp/hello.txt", 'w+') as afp
+            writer = Writer(afp)
+
+            await writer("Hello")
+            await writer(" ")
+            await writer("World")
+            await writer("\n")
+            await writer("\n")
+            await writer("From async world")
+            await afp.flush()
+
+            async for line in LineReader(afp):
+                print(line)
+
+
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(main())

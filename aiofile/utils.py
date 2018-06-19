@@ -75,15 +75,14 @@ class LineReader:
         linesep = b'\n' if self.__reader.file.binary else '\n'
 
         while True:
-            if self._buffer.tell() < self.__reader._chunk_size:
-                chunk = yield from self.__reader.read_chunk()
+            chunk = yield from self.__reader.read_chunk()
 
-                if chunk:
-                    if linesep not in chunk:
-                        self._buffer.write(chunk)
-                        continue
-
+            if chunk:
+                if linesep not in chunk:
                     self._buffer.write(chunk)
+                    continue
+
+                self._buffer.write(chunk)
 
             self._buffer.seek(0)
             line = self._buffer.readline()

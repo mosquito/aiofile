@@ -189,3 +189,21 @@ async def test_line_reader(aio_file_maker, loop, temp_file, uuid):
         read_lines.append(line[:-1])
 
     assert lines == read_lines
+
+
+@aio_impl
+async def test_line_reader_one_line(aio_file_maker, loop, temp_file):
+    afp = await aio_file_maker(temp_file, 'w+')
+
+    writer = Writer(afp)
+
+    payload = " ".join(uuid4().hex for _ in range(1000))
+
+    await writer(payload)
+
+    read_lines = []
+
+    async for line in LineReader(afp):
+        read_lines.append(line)
+
+    assert payload == read_lines[0]
