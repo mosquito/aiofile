@@ -69,7 +69,7 @@ class AIOFile:
     def __init__(self, filename: str, mode: str="r", access_mode: int=0o644,
                  loop=None, encoding: str='utf-8'):
         self.__loop = loop or asyncio.get_event_loop()
-        self.__fname = filename
+        self.__fname = str(filename)
         self.__mode = mode
         self.__access_mode = access_mode
         self.__binary = 'b' in self.__mode
