@@ -1,6 +1,7 @@
 import os
 import asyncio
-from functools import partial
+
+from aiofile.utils import run_in_thread
 
 try:
     from .posix_aio import IO_NOP, IO_WRITE, IO_READ, AIOOperation
@@ -42,11 +43,6 @@ def mode_to_flags(mode: str):
     return flags
 
 
-def run_in_thread(func, *args, **kwargs) -> asyncio.Future:
-    loop = kwargs.pop('loop', None) or asyncio.get_event_loop()
-    return loop.run_in_executor(None, partial(func, *args, **kwargs))
-
-
 class AIOFile:
     __slots__ = (
         '__fileno', '__fname', '__mode',
@@ -67,6 +63,10 @@ class AIOFile:
 
         self.__fileno = AIO_FILE_NOT_OPENED
         self.__encoding = encoding
+
+    @property
+    def name(self):
+        return self.__fname
 
     @asyncio.coroutine
     def open(self):
@@ -124,7 +124,7 @@ class AIOFile:
             raise ValueError("Unsupported value %d for size" % size)
 
         if size == -1:
-            size = os.stat(self.__fileno).st_size
+            size = (yield from run_in_thread(os.stat, self.__fileno)).st_size
 
         data = yield from self.OPERATION_CLASS(
             self.IO_READ,
