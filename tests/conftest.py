@@ -5,9 +5,15 @@ from uuid import uuid4
 from tempfile import NamedTemporaryFile
 
 
+try:
+    from aiomisc.utils import new_event_loop
+except ImportError:
+    from asyncio import new_event_loop
+
+
 @pytest.yield_fixture()
 def event_loop():
-    loop = asyncio.new_event_loop()
+    loop = new_event_loop()
     asyncio.set_event_loop(loop)
 
     try:
