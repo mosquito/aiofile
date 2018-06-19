@@ -1,5 +1,6 @@
 import os
 import asyncio
+from collections import namedtuple
 from functools import partial
 from typing import Generator, Any, Union
 
@@ -10,13 +11,6 @@ except ImportError:
         IO_READ, IO_WRITE, IO_NOP, ThreadedAIOOperation as AIOOperation
     )
 
-MODE_MAPPING = (
-    ("x", (os.O_EXCL,)),
-    ("r", (os.O_RDONLY, os.O_RDWR)),
-    ("a", (os.O_APPEND, os.O_CREAT)),
-    ("w", (os.O_RDWR, os.O_TRUNC, os.O_CREAT)),
-    ("+", (os.O_RDWR,)),
-)
 
 AIO_FILE_NOT_OPENED = -1
 AIO_FILE_CLOSED = -2
@@ -33,32 +27,97 @@ def run_in_thread(func, *args, **kwargs) -> asyncio.Future:
     return loop.run_in_executor(None, partial(func, *args, **kwargs))
 
 
-def mode_to_flags(mode: str):
-    if len(set("awrb+") | set(mode)) > 5:
-        raise ValueError('Invalid mode %s' % repr(mode))
+FileMode = namedtuple('FileMode', (
+    'readable',
+    'writable',
+    'plus',
+    'appending',
+    'created',
+    'flags',
+    'binary',
+))
 
-    if len(set(mode) & set("awr")) > 1:
-        raise ValueError(
-            'must have exactly one of create/read/write/append mode'
-        )
 
-    flags = 0
+def parse_mode(mode: str):
+    """ Rewritten from `cpython fileno`_
 
-    for m_mode, m_flags in MODE_MAPPING:
-        if m_mode in mode:
-            for flag in m_flags:
-                flags |= flag
+    .. _cpython fileio: https://github.com/python/cpython/blob/55edd0c185ad2d895b5d73e47d67049bc156b654/Modules/_io/fileio.c#L289
+    """
 
-    flags |= os.O_NONBLOCK
+    flags = os.O_RDONLY
 
-    return flags
+    rwa = False
+    writable = False
+    readable = False
+    plus = False
+    appending = False
+    created = False
+    binary = False
+
+    for m in mode:
+        if m == 'x':
+            rwa = True
+            created = True
+            writable = True
+            flags |= os.O_EXCL | os.O_CREAT
+
+        if m == 'r':
+            if rwa:
+                raise Exception('Bad mode')
+
+            rwa = True
+            readable = True
+
+        if m == 'w':
+            if rwa:
+                raise Exception('Bad mode')
+
+            rwa = True
+            writable = True
+
+            flags |= os.O_CREAT | os.O_TRUNC
+
+        if m == 'a':
+            if rwa:
+                raise Exception('Bad mode')
+            rwa = True
+            writable = True
+            appending = True
+            flags |= os.O_APPEND | os.O_CREAT
+
+        if m == '+':
+            if plus:
+                raise Exception('Bad mode')
+            readable = True
+            writable = True
+            plus = True
+
+        if m == 'b':
+            binary = True
+
+    if readable and writable:
+        flags |= os.O_RDWR
+
+    elif readable:
+        flags |= os.O_RDONLY
+    else:
+        flags |= os.O_WRONLY
+
+    return FileMode(
+        readable=readable,
+        writable=writable,
+        plus=plus,
+        appending=appending,
+        created=created,
+        flags=flags,
+        binary=binary,
+    )
 
 
 class AIOFile:
     __slots__ = (
-        '__fileno', '__fname', '__mode',
+        '__fileno', '__fname', 'mode',
         '__access_mode', '__loop', '__encoding',
-        '__binary',
     )
 
     OPERATION_CLASS = AIOOperation
@@ -68,21 +127,16 @@ class AIOFile:
 
     def __init__(self, filename: str, mode: str="r", access_mode: int=0o644,
                  loop=None, encoding: str='utf-8'):
+        self.mode = parse_mode(mode)
         self.__loop = loop or asyncio.get_event_loop()
         self.__fname = str(filename)
-        self.__mode = mode
         self.__access_mode = access_mode
-        self.__binary = 'b' in self.__mode
         self.__fileno = AIO_FILE_NOT_OPENED
         self.__encoding = encoding
 
     @property
     def name(self):
         return self.__fname
-
-    @property
-    def binary(self):
-        return self.__binary
 
     @property
     def loop(self):
@@ -100,7 +154,7 @@ class AIOFile:
             os.open,
             self.__fname,
             loop=self.__loop,
-            flags=mode_to_flags(self.__mode),
+            flags=self.mode.flags,
             mode=self.__access_mode
         )
 
@@ -112,7 +166,9 @@ class AIOFile:
         if self.__fileno < 0:
             return
 
-        yield from self.fsync()
+        if self.mode.writable:
+            yield from self.fsync()
+
         yield from run_in_thread(os.close, self.__fileno, loop=self.__loop)
         self.__fileno = AIO_FILE_CLOSED
 
@@ -161,14 +217,14 @@ class AIOFile:
             self.__loop
         )
 
-        return data if self.__binary else data.decode(self.__encoding)
+        return data if self.mode.binary else data.decode(self.__encoding)
 
     @asyncio.coroutine
     def write(self, data: (str, bytes), offset: int=0):
         if self.__fileno < 0:
             raise asyncio.InvalidStateError('AIOFile closed')
 
-        if self.__binary:
+        if self.mode.binary:
             if not isinstance(data, bytes):
                 raise ValueError("Data must be bytes in binary mode")
             bytes_data = data

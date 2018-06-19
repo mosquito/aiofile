@@ -231,10 +231,10 @@ async def test_modes(aio_file_maker, event_loop, tmpdir):
         await afp.write('foo')
 
     async with aio_file_maker(tmpfile, 'r', loop=event_loop) as afp:
-        assert (await afp.read()) == 'foo'
+        assert await afp.read() == 'foo'
 
     async with aio_file_maker(tmpfile, 'a+', loop=event_loop) as afp:
-        assert (await afp.read()) == 'foo'
+        assert await afp.read() == 'foo'
 
     async with aio_file_maker(tmpfile, 'r+', loop=event_loop) as afp:
-        assert (await afp.read()) == 'foo'
+        assert await afp.read() == 'foo'

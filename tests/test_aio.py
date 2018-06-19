@@ -228,9 +228,12 @@ def test_modes(aio_file_maker, event_loop, tmpdir):
 
     afp = yield from aio_file_maker(tmpfile, 'r', loop=event_loop)
     assert (yield from afp.read()) == 'foo'
+    yield from afp.close()
 
     afp = yield from aio_file_maker(tmpfile, 'a+', loop=event_loop)
     assert (yield from afp.read()) == 'foo'
+    yield from afp.close()
 
     afp = yield from aio_file_maker(tmpfile, 'r+', loop=event_loop)
     assert (yield from afp.read()) == 'foo'
+    yield from afp.close()
