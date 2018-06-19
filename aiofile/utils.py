@@ -36,9 +36,12 @@ class Reader:
 
     @asyncio.coroutine
     def __next__(self):
-        chunk = yield from self.__aio_file.read(self.__chunk_size, self.__offset)
-        chunk_size = len(chunk)
-        self.__offset += chunk_size
+        chunk = yield from self.__aio_file.read(
+            self.__chunk_size,
+            self.__offset
+        )
+
+        self.__offset += len(chunk)
 
         return chunk
 

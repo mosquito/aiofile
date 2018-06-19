@@ -14,8 +14,6 @@ def test_read(aio_file_maker, temp_file, uuid):
     aio_file = yield from aio_file_maker(temp_file, 'r')
 
     data = yield from aio_file.read()
-    data = data.decode()
-
     assert data == uuid
 
 
@@ -28,8 +26,6 @@ def test_read_write(aio_file_maker, temp_file, uuid):
     yield from w_file.fsync()
 
     data = yield from r_file.read()
-    data = data.decode()
-
     assert data == uuid
 
 
@@ -45,8 +41,6 @@ def test_read_offset(aio_file_maker, temp_file, uuid):
         offset=len(uuid),
         size=len(uuid)
     )
-
-    data = data.decode()
 
     assert data == uuid
 
@@ -65,8 +59,6 @@ def test_read_write_offset(aio_file_maker, temp_file, uuid):
         offset=len(uuid),
         size=len(uuid)
     )
-
-    data = data.decode()
 
     assert data == uuid
 
@@ -90,7 +82,7 @@ def test_reader_writer(aio_file_maker, temp_file, uuid):
         if not chunk:
             break
 
-        assert chunk.decode() == uuid
+        assert chunk == uuid
         count += 1
 
     assert count == 100
@@ -118,7 +110,7 @@ def test_parallel_writer(aio_file_maker, temp_file, uuid):
         if not chunk:
             break
 
-        assert chunk.decode() == uuid
+        assert chunk == uuid
         count += 1
 
     assert count == 1000
@@ -126,8 +118,8 @@ def test_parallel_writer(aio_file_maker, temp_file, uuid):
 
 @aio_impl
 def test_parallel_writer_ordering(aio_file_maker, loop, temp_file, uuid):
-    w_file = yield from aio_file_maker(temp_file, 'w')
-    r_file = yield from aio_file_maker(temp_file, 'r')
+    w_file = yield from aio_file_maker(temp_file, 'wb')
+    r_file = yield from aio_file_maker(temp_file, 'rb')
 
     count = 1000
     chunk_size = 1024

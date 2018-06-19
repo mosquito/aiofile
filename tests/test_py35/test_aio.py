@@ -23,7 +23,6 @@ async def test_read(aio_file_maker, temp_file, uuid):
     aio_file = await aio_file_maker(temp_file, 'r')
 
     data = await aio_file.read()
-    data = data.decode()
 
     assert data == uuid
 
@@ -37,7 +36,6 @@ async def test_read_write(aio_file_maker, temp_file, uuid):
     await w_file.fsync()
 
     data = await r_file.read()
-    data = data.decode()
 
     assert data == uuid
 
@@ -54,8 +52,6 @@ async def test_read_offset(aio_file_maker, temp_file, uuid):
         offset=len(uuid),
         size=len(uuid)
     )
-
-    data = data.decode()
 
     assert data == uuid
 
@@ -75,8 +71,6 @@ async def test_read_write_offset(aio_file_maker, temp_file, uuid):
         size=len(uuid)
     )
 
-    data = data.decode()
-
     assert data == uuid
 
 
@@ -95,7 +89,7 @@ async def test_reader_writer(aio_file_maker, temp_file, uuid):
     count = 0
     for async_chunk in Reader(r_file, chunk_size=len(uuid)):
         chunk = await async_chunk
-        assert chunk.decode() == uuid
+        assert chunk == uuid
         count += 1
 
     assert count == 100
@@ -114,7 +108,7 @@ async def test_reader_writer(aio_file_maker, loop, temp_file, uuid):
     await w_file.fsync()
 
     async for chunk in Reader(r_file, chunk_size=len(uuid)):
-        assert chunk.decode() == uuid
+        assert chunk == uuid
 
 
 @aio_impl
@@ -133,13 +127,8 @@ async def test_parallel_writer(aio_file_maker, loop, temp_file, uuid):
     await w_file.fsync()
 
     count = 0
-    for async_chunk in Reader(r_file, chunk_size=len(uuid)):
-        chunk = await async_chunk
-
-        if not chunk:
-            break
-
-        assert chunk.decode() == uuid
+    async for chunk in Reader(r_file, chunk_size=len(uuid)):
+        assert chunk == uuid
         count += 1
 
     assert count == 1000
@@ -147,8 +136,8 @@ async def test_parallel_writer(aio_file_maker, loop, temp_file, uuid):
 
 @aio_impl
 async def test_parallel_writer_ordering(aio_file_maker, loop, temp_file, uuid):
-    w_file = await aio_file_maker(temp_file, 'w')
-    r_file = await aio_file_maker(temp_file, 'r')
+    w_file = await aio_file_maker(temp_file, 'wb')
+    r_file = await aio_file_maker(temp_file, 'rb')
 
     count = 1000
     chunk_size = 1024
@@ -168,9 +157,6 @@ async def test_parallel_writer_ordering(aio_file_maker, loop, temp_file, uuid):
     result = b''
 
     async for chunk in Reader(r_file, chunk_size=chunk_size):
-        if not chunk:
-            break
-
         result += chunk
 
     assert data == result

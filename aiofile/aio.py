@@ -1,5 +1,6 @@
 import os
 import asyncio
+from typing import Generator, Any
 
 from aiofile.utils import run_in_thread
 
@@ -47,6 +48,7 @@ class AIOFile:
     __slots__ = (
         '__fileno', '__fname', '__mode',
         '__access_mode', '__loop', '__encoding',
+        '__binary',
     )
 
     OPERATION_CLASS = AIOOperation
@@ -60,7 +62,7 @@ class AIOFile:
         self.__fname = filename
         self.__mode = mode
         self.__access_mode = access_mode
-
+        self.__binary = 'b' in self.__mode
         self.__fileno = AIO_FILE_NOT_OPENED
         self.__encoding = encoding
 
@@ -116,7 +118,7 @@ class AIOFile:
         return self.__loop.create_task(self.close())
 
     @asyncio.coroutine
-    def read(self, size: int=-1, offset: int=0):
+    def read(self, size: int=-1, offset: int=0) -> Generator[Any, None, bytes]:
         if self.__fileno < 0:
             raise asyncio.InvalidStateError('AIOFile closed')
 
@@ -134,19 +136,21 @@ class AIOFile:
             self.__loop
         )
 
-        return data
+        return data if self.__binary else data.decode(self.__encoding)
 
     @asyncio.coroutine
     def write(self, data: (str, bytes), offset: int=0):
         if self.__fileno < 0:
             raise asyncio.InvalidStateError('AIOFile closed')
 
-        if isinstance(data, str):
-            bytes_data = data.encode(self.__encoding)
-        elif isinstance(data, bytes):
+        if self.__binary:
+            if not isinstance(data, bytes):
+                raise ValueError("Data must be bytes in binary mode")
             bytes_data = data
         else:
-            raise ValueError("Data must be str or bytes")
+            if not isinstance(data, str):
+                raise ValueError("Data must be str in text mode")
+            bytes_data = data.encode(self.__encoding)
 
         op = self.OPERATION_CLASS(
             self.IO_WRITE,
