@@ -129,8 +129,6 @@ class AIOFile:
         if size < -1:
             raise ValueError("Unsupported value %d for size" % size)
 
-        yield from self.open()
-
         if size == -1:
             size = os.stat(self.__fileno).st_size
 
@@ -148,8 +146,6 @@ class AIOFile:
     def write(self, data: (str, bytes), offset: int=0):
         if self.__fileno < 0:
             raise asyncio.InvalidStateError('AIOFile closed')
-
-        yield from self.open()
 
         if isinstance(data, str):
             bytes_data = data.encode(self.__encoding)
@@ -173,8 +169,6 @@ class AIOFile:
     def fsync(self):
         if self.__fileno < 0:
             raise asyncio.InvalidStateError('AIOFile closed')
-
-        yield from self.open()
 
         return (
             yield from self.OPERATION_CLASS(
