@@ -1,7 +1,9 @@
 import os
 import asyncio
 from random import shuffle
-from aiofile.utils import Reader, Writer
+from uuid import uuid4
+
+from aiofile.utils import Reader, Writer, LineReader
 from aiofile.posix_aio import AIOOperation, IO_WRITE, IO_NOP, IO_READ
 from .. import *
 
@@ -167,3 +169,23 @@ async def test_non_existent_file_ctx(aio_file_maker):
     with pytest.raises(FileNotFoundError):
         async with AIOFile("/c/windows/NonExistent.file", 'r'):
             pass
+
+
+@aio_impl
+async def test_line_reader(aio_file_maker, loop, temp_file, uuid):
+    afp = await aio_file_maker(temp_file, 'w+')
+
+    writer = Writer(afp)
+
+    lines = [uuid4().hex for _ in range(1000)]
+
+    for line in lines:
+        await writer(line)
+        await writer('\n')
+
+    read_lines = []
+
+    async for line in LineReader(afp):
+        read_lines.append(line[:-1])
+
+    assert lines == read_lines

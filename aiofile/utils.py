@@ -1,62 +1,115 @@
 import asyncio
-import sys
-from functools import partial
+import io
 
-
-PY_35 = sys.version_info >= (3, 5)
-
-
-def run_in_thread(func, *args, **kwargs) -> asyncio.Future:
-    loop = kwargs.pop('loop', None) or asyncio.get_event_loop()
-    return loop.run_in_executor(None, partial(func, *args, **kwargs))
+from .aio import AIOFile
 
 
 class Reader:
-    __slots__ = '__chunk_size', '__offset', '__aio_file'
+    __slots__ = '_chunk_size', '__offset', 'file', '__lock'
 
-    def __init__(self, aio_file, offset: int = 0, chunk_size: int = 32 * 1024):
-        self.__chunk_size = int(chunk_size)
+    def __init__(self, aio_file: AIOFile,
+                 offset: int = 0, chunk_size: int = 32 * 1024):
+
+        self._chunk_size = int(chunk_size)
         self.__offset = int(offset)
-        self.__aio_file = aio_file
+        self.file = aio_file
+        self.__lock = asyncio.Lock(loop=self.file.loop)
 
-    if PY_35:
-        @asyncio.coroutine
-        def __anext__(self):
-            chunk = yield from self.__aio_file.read(self.__chunk_size, self.__offset)
+    @asyncio.coroutine
+    def read_chunk(self):
+        with (yield from self.__lock):
+            chunk = yield from self.file.read(
+                self._chunk_size,
+                self.__offset
+            )
+
             chunk_size = len(chunk)
             self.__offset += chunk_size
 
-            if chunk_size == 0:
-                raise StopAsyncIteration(chunk)
-
             return chunk
 
-        def __aiter__(self):
-            return self
+    @asyncio.coroutine
+    def __anext__(self):
+        chunk = yield from self.read_chunk()
+
+        if not chunk:
+            raise StopAsyncIteration(chunk)
+
+        return chunk
+
+    def __aiter__(self):
+        return self
 
     @asyncio.coroutine
     def __next__(self):
-        chunk = yield from self.__aio_file.read(
-            self.__chunk_size,
-            self.__offset
-        )
-
-        self.__offset += len(chunk)
-
-        return chunk
+        return (yield from self.read_chunk())
 
     def __iter__(self):
         return self
 
 
 class Writer:
-    __slots__ = '__chunk_size', '__offset', '__aio_file'
+    __slots__ = '__chunk_size', '__offset', '__aio_file', '__lock'
 
-    def __init__(self, aio_file, offset: int = 0):
+    def __init__(self, aio_file: AIOFile, offset: int = 0):
         self.__offset = int(offset)
         self.__aio_file = aio_file
+        self.__lock = asyncio.Lock(loop=self.__aio_file.loop)
 
     @asyncio.coroutine
     def __call__(self, data):
-        yield from self.__aio_file.write(data, self.__offset)
-        self.__offset += len(data)
+        with (yield from self.__lock):
+            yield from self.__aio_file.write(data, self.__offset)
+            self.__offset += len(data)
+
+
+class LineReader:
+    def __init__(self, aio_file: AIOFile, offset: int = 0,
+                 chunk_size: int = 255):
+
+        self.__reader = Reader(aio_file, chunk_size=chunk_size, offset=offset)
+        self._buffer = io.BytesIO() if aio_file.binary else io.StringIO()
+
+    @asyncio.coroutine
+    def readline(self):
+        linesep = b'\n' if self.__reader.file.binary else '\n'
+
+        while True:
+            if self._buffer.tell() < self.__reader._chunk_size:
+                chunk = yield from self.__reader.read_chunk()
+
+                if chunk:
+                    if linesep not in chunk:
+                        self._buffer.write(chunk)
+                        continue
+
+                    self._buffer.write(chunk)
+
+            self._buffer.seek(0)
+            line = self._buffer.readline()
+            tail = self._buffer.read()
+
+            self._buffer.seek(0)
+            self._buffer.truncate(0)
+            self._buffer.write(tail)
+
+            return line
+
+    @asyncio.coroutine
+    def __anext__(self):
+        line = yield from self.readline()
+
+        if not line:
+            raise StopAsyncIteration(line)
+
+        return line
+
+    def __aiter__(self):
+        return self
+
+    @asyncio.coroutine
+    def __next__(self):
+        return (yield from self.readline())
+
+    def __iter__(self):
+        return self

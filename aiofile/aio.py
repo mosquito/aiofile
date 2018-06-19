@@ -1,8 +1,7 @@
 import os
 import asyncio
-from typing import Generator, Any
-
-from aiofile.utils import run_in_thread
+from functools import partial
+from typing import Generator, Any, Union
 
 try:
     from .posix_aio import IO_NOP, IO_WRITE, IO_READ, AIOOperation
@@ -15,7 +14,7 @@ MODE_MAPPING = (
     ("x", (os.O_EXCL,)),
     ("r", (os.O_RDONLY,)),
     ("a", (os.O_APPEND, os.O_CREAT)),
-    ("w", (os.O_WRONLY, os.O_TRUNC, os.O_CREAT)),
+    ("w", (os.O_RDWR, os.O_TRUNC, os.O_CREAT)),
     ("+", (os.O_RDWR,)),
 )
 
@@ -70,6 +69,14 @@ class AIOFile:
     def name(self):
         return self.__fname
 
+    @property
+    def binary(self):
+        return self.__binary
+
+    @property
+    def loop(self):
+        return self.__binary
+
     @asyncio.coroutine
     def open(self):
         if self.__fileno == AIO_FILE_CLOSED:
@@ -118,7 +125,10 @@ class AIOFile:
         return self.__loop.create_task(self.close())
 
     @asyncio.coroutine
-    def read(self, size: int=-1, offset: int=0) -> Generator[Any, None, bytes]:
+    def read(
+                self, size: int=-1, offset: int=0
+            ) -> Generator[Any, None, Union[bytes, str]]:
+
         if self.__fileno < 0:
             raise asyncio.InvalidStateError('AIOFile closed')
 
@@ -186,3 +196,8 @@ class AIOFile:
             length,
             loop=self.__loop
         )
+
+
+def run_in_thread(func, *args, **kwargs) -> asyncio.Future:
+    loop = kwargs.pop('loop', None) or asyncio.get_event_loop()
+    return loop.run_in_executor(None, partial(func, *args, **kwargs))

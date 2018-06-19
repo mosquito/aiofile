@@ -1,8 +1,9 @@
 import asyncio
 import os
+from uuid import uuid4
 from random import shuffle
 
-from aiofile.utils import Reader, Writer
+from aiofile.utils import Reader, Writer, LineReader
 from . import *
 
 
@@ -154,3 +155,28 @@ def test_parallel_writer_ordering(aio_file_maker, loop, temp_file, uuid):
 def test_non_existent_file(aio_file_maker):
     with pytest.raises(FileNotFoundError):
         yield from aio_file_maker("/c/windows/NonExistent.file", 'r')
+
+
+@aio_impl
+def test_line_reader(aio_file_maker, loop, temp_file, uuid):
+    afp = yield from aio_file_maker(temp_file, 'w+')
+
+    writer = Writer(afp)
+
+    lines = [uuid4().hex for _ in range(1000)]
+
+    for line in lines:
+        yield from writer(line)
+        yield from writer('\n')
+
+    read_lines = []
+
+    for async_chunk in LineReader(afp):
+        line = yield from async_chunk
+
+        if not line:
+            break
+
+        read_lines.append(line[:-1])
+
+    assert lines == read_lines
