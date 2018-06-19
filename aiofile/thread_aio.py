@@ -16,7 +16,8 @@ class ThreadedAIOOperation:
     __slots__ = ('__fd', '__offset', '__nbytes', '__opcode',
                  '__buffer', '__loop', '__state', '__lock')
 
-    def __init__(self, opcode: int, fd: int, offset: int, nbytes: int, loop: asyncio.AbstractEventLoop):
+    def __init__(self, opcode: int, fd: int, offset: int, nbytes: int,
+                 loop: asyncio.AbstractEventLoop):
 
         if opcode not in (IO_READ, IO_WRITE, IO_NOP):
             raise ValueError('Invalid state')

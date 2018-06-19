@@ -1,5 +1,5 @@
-import os
 import asyncio
+import os
 from random import shuffle
 
 from aiofile.utils import Reader, Writer
@@ -11,7 +11,7 @@ def test_read(aio_file_maker, temp_file, uuid):
     with open(temp_file, "w") as f:
         f.write(uuid)
 
-    aio_file = aio_file_maker(temp_file, 'r')
+    aio_file = yield from aio_file_maker(temp_file, 'r')
 
     data = yield from aio_file.read()
     data = data.decode()
@@ -21,8 +21,8 @@ def test_read(aio_file_maker, temp_file, uuid):
 
 @aio_impl
 def test_read_write(aio_file_maker, temp_file, uuid):
-    r_file = aio_file_maker(temp_file, 'r')
-    w_file = aio_file_maker(temp_file, 'w')
+    r_file = yield from aio_file_maker(temp_file, 'r')
+    w_file = yield from aio_file_maker(temp_file, 'w')
 
     yield from w_file.write(uuid)
     yield from w_file.fsync()
@@ -39,7 +39,7 @@ def test_read_offset(aio_file_maker, temp_file, uuid):
         for _ in range(10):
             f.write(uuid)
 
-    aio_file = aio_file_maker(temp_file, 'r')
+    aio_file = yield from aio_file_maker(temp_file, 'r')
 
     data = yield from aio_file.read(
         offset=len(uuid),
@@ -53,8 +53,8 @@ def test_read_offset(aio_file_maker, temp_file, uuid):
 
 @aio_impl
 def test_read_write_offset(aio_file_maker, temp_file, uuid):
-    r_file = aio_file_maker(temp_file, 'r')
-    w_file = aio_file_maker(temp_file, 'w')
+    r_file = yield from aio_file_maker(temp_file, 'r')
+    w_file = yield from aio_file_maker(temp_file, 'w')
 
     for i in range(10):
         yield from w_file.write(uuid, offset=i * len(uuid))
@@ -73,8 +73,8 @@ def test_read_write_offset(aio_file_maker, temp_file, uuid):
 
 @aio_impl
 def test_reader_writer(aio_file_maker, temp_file, uuid):
-    r_file = aio_file_maker(temp_file, 'r')
-    w_file = aio_file_maker(temp_file, 'w')
+    r_file = yield from aio_file_maker(temp_file, 'r')
+    w_file = yield from aio_file_maker(temp_file, 'w')
 
     writer = Writer(w_file)
 
@@ -98,8 +98,8 @@ def test_reader_writer(aio_file_maker, temp_file, uuid):
 
 @aio_impl
 def test_parallel_writer(aio_file_maker, temp_file, uuid):
-    w_file = aio_file_maker(temp_file, 'w')
-    r_file = aio_file_maker(temp_file, 'r')
+    w_file = yield from aio_file_maker(temp_file, 'w')
+    r_file = yield from aio_file_maker(temp_file, 'r')
 
     futures = list()
 
@@ -126,8 +126,8 @@ def test_parallel_writer(aio_file_maker, temp_file, uuid):
 
 @aio_impl
 def test_parallel_writer_ordering(aio_file_maker, loop, temp_file, uuid):
-    w_file = posix_aio_file(temp_file, 'w')
-    r_file = posix_aio_file(temp_file, 'r')
+    w_file = yield from aio_file_maker(temp_file, 'w')
+    r_file = yield from aio_file_maker(temp_file, 'r')
 
     count = 1000
     chunk_size = 1024
@@ -161,12 +161,4 @@ def test_parallel_writer_ordering(aio_file_maker, loop, temp_file, uuid):
 @asyncio.coroutine
 def test_non_existent_file(aio_file_maker):
     with pytest.raises(FileNotFoundError):
-        aio_file_maker("/c/windows/NonExistent.file", 'r')
-
-
-@aio_impl
-@asyncio.coroutine
-def test_non_existent_file_ctx(aio_file_maker):
-    with pytest.raises(FileNotFoundError):
-        with aio_file_maker("/c/windows/NonExistent.file", 'r'):
-            yield 
+        yield from aio_file_maker("/c/windows/NonExistent.file", 'r')

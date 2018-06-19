@@ -54,7 +54,7 @@ setup(
     build_requires=['cython'],
     keywords=["aio", "python", "asyncio", "cython", "fileio", "io"],
     classifiers=[
-        'Development Status :: 4 - Beta',
+        'Development Status :: 5 - Production/Stable',
         'Environment :: Console',
         'Intended Audience :: Developers',
         'Intended Audience :: Education',

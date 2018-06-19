@@ -25,14 +25,14 @@ Real asynchronous file operations with asyncio support.
 Status
 ------
 
-Development - BETA
+Development - Stable
 
 
 Features
 --------
 
 * AIOFile has no internal pointer. You should pass ``offset`` and ``chunk_size`` for each operation or use helpers (Reader or Writer).
-* For POSIX (MacOS X and Linux) using Cython implementaion based on `aio.h`_ (using `Cython`_).
+* For POSIX (MacOS X and Linux) using implementaion based on `aio.h`_ (with `Cython`_).
 * For non-POSIX systems using thread-based implementation
 
 .. _aio.h: https://github.com/torvalds/linux/blob/master/include/linux/aio.h
@@ -50,7 +50,7 @@ Totally async read and write:
     from aiofile import AIOFile, Reader, Writer
 
     async def main(loop):
-        aio_file = AIOFile("/tmp/hello.txt", 'w+', loop=loop)
+        aio_file = await aio_open("/tmp/hello.txt", 'w+', loop=loop)
 
         await aio_file.write(b"Hello ")
         await aio_file.write(b"world", offset=7)
@@ -67,10 +67,10 @@ Write and read with helpers:
 .. code-block:: python
 
     import asyncio
-    from aiofile import AIOFile, Reader, Writer
+    from aiofile import aio_open, Reader, Writer
 
     async def main(loop):
-        aio_file = AIOFile("/tmp/hello.txt", 'w+', loop=loop)
+        aio_file = await aio_open("/tmp/hello.txt", 'w+', loop=loop)
 
         writer = Writer(aio_file)
         reader = Reader(aio_file, chunk_size=8)
@@ -86,3 +86,26 @@ Write and read with helpers:
     loop = asyncio.get_event_loop()
     loop.run_until_complete(main(loop))
 
+
+or use async context manager:
+
+.. code-block:: python
+
+    import asyncio
+    from aiofile import AIOFile, Reader, Writer
+
+    async def main(loop):
+        async with AIOFile("/tmp/hello.txt", 'w+', loop=loop) as aio_file:
+            writer = Writer(aio_file)
+            reader = Reader(aio_file, chunk_size=8)
+
+            await writer(b"Hello")
+            await writer(b" ")
+            await writer(b"World")
+            await aio_file.flush()
+
+            async for chunk in reader:
+                print(chunk)
+
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(main(loop))

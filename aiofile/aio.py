@@ -1,11 +1,24 @@
 import os
 import asyncio
-
+from functools import partial
 
 try:
     from .posix_aio import IO_NOP, IO_WRITE, IO_READ, AIOOperation
 except ImportError:
-    from .thread_aio import IO_READ, IO_WRITE, IO_NOP, ThreadedAIOOperation as AIOOperation
+    from .thread_aio import (
+        IO_READ, IO_WRITE, IO_NOP, ThreadedAIOOperation as AIOOperation
+    )
+
+MODE_MAPPING = (
+    ("r", (os.O_RDONLY,)),
+    ("w", (os.O_CREAT, os.O_WRONLY)),
+    ("x", (os.O_CREAT, os.O_EXCL)),
+    ("a", (os.O_CREAT, os.O_APPEND)),
+    ("+", (os.O_RDWR,)),
+)
+
+AIO_FILE_NOT_OPENED = -1
+AIO_FILE_CLOSED = -2
 
 
 def mode_to_flags(mode: str):
@@ -13,41 +26,66 @@ def mode_to_flags(mode: str):
         raise ValueError('Invalid mode %s' % repr(mode))
 
     if len(set(mode) & set("awr")) > 1:
-        raise ValueError('must have exactly one of create/read/write/append mode')
+        raise ValueError(
+            'must have exactly one of create/read/write/append mode'
+        )
 
     flags = 0
     flags |= os.O_NONBLOCK
 
-    if '+' in mode:
-        flags |= os.O_CREAT
-    if "a" in mode:
-        flags |= os.O_RDWR
-        flags |= os.O_APPEND
-    elif "w" in mode:
-        flags |= os.O_RDWR
-    elif "r" in mode:
-        flags |= os.O_RDONLY
+    for m_mode, m_flags in MODE_MAPPING:
+        if m_mode in mode:
+            for flag in m_flags:
+                flags |= flag
 
     return flags
 
 
+def run_in_thread(func, *args, **kwargs) -> asyncio.Future:
+    loop = kwargs.pop('loop', None) or asyncio.get_event_loop()
+    return loop.run_in_executor(None, partial(func, *args, **kwargs))
+
+
 class AIOFile:
-    __slots__ = '__fileno', '__fname', '__mode', '__access_mode', '__loop',
+    __slots__ = (
+        '__fileno', '__fname', '__mode',
+        '__access_mode', '__loop', '__encoding',
+    )
 
     OPERATION_CLASS = AIOOperation
     IO_READ = IO_READ
     IO_WRITE = IO_WRITE
     IO_NOP = IO_NOP
 
-    def __init__(self, filename: str, mode: str="r", access_mode: int=0o644, loop=None):
+    def __init__(self, filename: str, mode: str="r", access_mode: int=0o644,
+                 loop=None, encoding: str='utf-8'):
         self.__loop = loop or asyncio.get_event_loop()
         self.__fname = filename
         self.__mode = mode
         self.__access_mode = access_mode
 
-        self.__fileno = -1
-        self.__fileno = os.open(
+        self.__fileno = AIO_FILE_NOT_OPENED
+        self.__encoding = encoding
+
+    @asyncio.coroutine
+    def open(self):
+        if self.__fileno == AIO_FILE_CLOSED:
+            raise asyncio.InvalidStateError('AIOFile closed')
+
+        if self.__fileno != AIO_FILE_NOT_OPENED:
+            return
+
+        if 'w' in self.__mode:
+            yield from run_in_thread(
+                os.truncate,
+                self.__fname, 0,
+                loop=self.__loop,
+            )
+
+        self.__fileno = yield from run_in_thread(
+            os.open,
             self.__fname,
+            loop=self.__loop,
             flags=mode_to_flags(self.__mode),
             mode=self.__access_mode
         )
@@ -55,48 +93,104 @@ class AIOFile:
     def __repr__(self):
         return "<AIOFile: %r>" % self.__fname
 
+    @asyncio.coroutine
     def close(self):
         if self.__fileno < 0:
             return
 
-        os.close(self.__fileno)
-        self.__fileno = -2
+        yield from self.fsync()
+        yield from run_in_thread(os.close, self.__fileno, loop=self.__loop)
+        self.__fileno = AIO_FILE_CLOSED
 
     def fileno(self):
         return self.__fileno
 
-    def __enter__(self):
+    def __iter__(self):
+        yield from self.open()
         return self
 
-    def __exit__(self, *args):
-        self.close()
+    def __await__(self):
+        yield from self.open()
+        return self
 
-    def __del__(self):
-        self.close()
+    @asyncio.coroutine
+    def __aenter__(self):
+        yield from self.open()
+        return self
+
+    def __aexit__(self, *args):
+        return self.__loop.create_task(self.close())
 
     @asyncio.coroutine
     def read(self, size: int=-1, offset: int=0):
+        if self.__fileno < 0:
+            raise asyncio.InvalidStateError('AIOFile closed')
+
         if size < -1:
             raise ValueError("Unsupported value %d for size" % size)
+
+        yield from self.open()
 
         if size == -1:
             size = os.stat(self.__fileno).st_size
 
-        return (yield from self.OPERATION_CLASS(self.IO_READ, self.__fileno, offset, size, self.__loop))
+        data = yield from self.OPERATION_CLASS(
+            self.IO_READ,
+            self.__fileno,
+            offset,
+            size,
+            self.__loop
+        )
+
+        return data
 
     @asyncio.coroutine
     def write(self, data: (str, bytes), offset: int=0):
+        if self.__fileno < 0:
+            raise asyncio.InvalidStateError('AIOFile closed')
+
+        yield from self.open()
+
         if isinstance(data, str):
-            bytes_data = data.encode()
+            bytes_data = data.encode(self.__encoding)
         elif isinstance(data, bytes):
             bytes_data = data
         else:
             raise ValueError("Data must be str or bytes")
 
-        op = self.OPERATION_CLASS(self.IO_WRITE, self.__fileno, offset, len(bytes_data), self.__loop)
+        op = self.OPERATION_CLASS(
+            self.IO_WRITE,
+            self.__fileno,
+            offset,
+            len(bytes_data),
+            self.__loop
+        )
+
         op.buffer = bytes_data
         return (yield from op)
 
     @asyncio.coroutine
     def fsync(self):
-        return (yield from self.OPERATION_CLASS(self.IO_NOP, self.__fileno, 0, 0, self.__loop))
+        if self.__fileno < 0:
+            raise asyncio.InvalidStateError('AIOFile closed')
+
+        yield from self.open()
+
+        return (
+            yield from self.OPERATION_CLASS(
+                self.IO_NOP,
+                self.__fileno, 0, 0,
+                self.__loop
+            )
+        )
+
+    def truncate(self, length: int=0) -> asyncio.Future:
+        if self.__fileno < 0:
+            raise asyncio.InvalidStateError('AIOFile closed')
+
+        return run_in_thread(
+            os.truncate,
+            self.__fname,
+            length,
+            loop=self.__loop
+        )
