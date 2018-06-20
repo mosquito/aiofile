@@ -9,8 +9,8 @@ from posix.signal cimport sigval, SIGEV_THREAD, SIGEV_NONE
 from posix.types cimport off_t
 
 import asyncio
-import platform
 import logging
+import platform
 from errno import errorcode
 
 
@@ -172,17 +172,17 @@ cdef class AIOOperation:
     cdef int __state
     cdef unsigned long long cid
     cdef object loop
-    cdef object _result
+    cdef bool __result
 
     cpdef _set_result(self):
-        self.loop.call_soon_threadsafe(self._result.set_result, None)
+        self.__result = True
 
     def __cinit__(self, int opcode, int fd, off_t offset, int nbytes, loop):
         if opcode not in (LIO_READ, LIO_WRITE, LIO_NOP):
             raise ValueError("Invalid state")
 
         self.loop = loop
-        self._result = create_future(loop)
+        self.__result = False
         self.cid = id(self)
 
         with nogil:
@@ -345,7 +345,8 @@ cdef class AIOOperation:
 
             # Awaiting callback when SIGEV_THREAD  (Linux)
             if self.cb.aio_sigevent.sigev_notify == SIGEV_THREAD:
-                yield from self._result
+                while not self.__result:
+                    yield
 
             # Polling aio_error when SIGEV_NONE (Mac OS X)
             elif self.cb.aio_sigevent.sigev_notify == SIGEV_NONE:
