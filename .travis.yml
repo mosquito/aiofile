@@ -7,5 +7,5 @@ python:
 install:
   - pip install -Ue '.[develop]'
 script:
-  - py.test --cov=aiofile tests
+  - py.test --cov=aiofile --capture=no -vv tests
   - pip uninstall -y .
