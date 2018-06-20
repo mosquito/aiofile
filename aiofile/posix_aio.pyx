@@ -1,7 +1,7 @@
 from cpython cimport bytes, bool
 from libc.errno cimport EAGAIN, EBADF, EINVAL, ENOSYS, EOVERFLOW, errno
 from libc.stdlib cimport calloc, free
-from libc.stdint cimport uint32_t
+from libc.stdint cimport uint32_t, uint8_t
 from libc.string cimport memcpy, strerror
 from posix.fcntl cimport O_DSYNC
 from posix.signal cimport sigevent
@@ -172,17 +172,17 @@ cdef class AIOOperation:
     cdef int __state
     cdef unsigned long long cid
     cdef object loop
-    cdef bool __result
+    cdef uint8_t __result
 
     cpdef _set_result(self):
-        self.__result = True
+        self.__result = 1
 
     def __cinit__(self, int opcode, int fd, off_t offset, int nbytes, loop):
         if opcode not in (LIO_READ, LIO_WRITE, LIO_NOP):
             raise ValueError("Invalid state")
 
         self.loop = loop
-        self.__result = False
+        self.__result = 0
         self.cid = id(self)
 
         with nogil:
@@ -345,7 +345,7 @@ cdef class AIOOperation:
 
             # Awaiting callback when SIGEV_THREAD  (Linux)
             if self.cb.aio_sigevent.sigev_notify == SIGEV_THREAD:
-                while not self.__result:
+                while self.__result == 0:
                     yield
 
             # Polling aio_error when SIGEV_NONE (Mac OS X)
