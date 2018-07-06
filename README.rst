@@ -76,14 +76,14 @@ Write and read with helpers
 
 
     async def main():
-        async with AIOFile("/tmp/hello.txt", 'w+') as afp
+        async with AIOFile("/tmp/hello.txt", 'w+') as afp:
             writer = Writer(afp)
             reader = Reader(afp, chunk_size=8)
 
             await writer("Hello")
             await writer(" ")
             await writer("World")
-            await afp.flush()
+            await afp.fsync()
 
             async for chunk in reader:
                 print(chunk)
@@ -91,6 +91,7 @@ Write and read with helpers
 
     loop = asyncio.get_event_loop()
     loop.run_until_complete(main())
+
 
 
 Read file line by line
@@ -103,7 +104,7 @@ Read file line by line
 
 
     async def main():
-        async with AIOFile("/tmp/hello.txt", 'w+') as afp
+        async with AIOFile("/tmp/hello.txt", 'w+') as afp:
             writer = Writer(afp)
 
             await writer("Hello")
@@ -112,7 +113,7 @@ Read file line by line
             await writer("\n")
             await writer("\n")
             await writer("From async world")
-            await afp.flush()
+            await afp.fsync()
 
             async for line in LineReader(afp):
                 print(line)
