@@ -12,6 +12,7 @@ function build_wheel() {
 build_wheel cp34-cp34m
 build_wheel cp35-cp35m
 build_wheel cp36-cp36m
+build_wheel cp37-cp37m
 
 
 cd ${DST}

@@ -16,6 +16,9 @@ class ThreadedAIOOperation:
     __slots__ = ('__fd', '__offset', '__nbytes', '__opcode',
                  '__buffer', '__loop', '__state', '__lock')
 
+    # None means default executor
+    EXECUTOR = None
+
     def __init__(self, opcode: int, fd: int, offset: int, nbytes: int,
                  loop: asyncio.AbstractEventLoop):
 
@@ -57,7 +60,10 @@ class ThreadedAIOOperation:
             raise RuntimeError('Invalid state')
 
         self.__state = False
-        result = yield from self.__loop.run_in_executor(None, self._execute)
+        result = yield from self.__loop.run_in_executor(
+            self.EXECUTOR, self._execute
+        )
+
         self.__state = True
         return result
 
