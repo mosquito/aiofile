@@ -138,7 +138,7 @@ cdef class SimpleSemaphore:
         yield
 
         while True:
-            if self.value + 1 > self.max_value:
+            if self.value >= self.max_value:
                 yield
             else:
                 self.value += 1
@@ -154,11 +154,15 @@ cdef class SimpleSemaphore:
 
 cdef object semaphore = SimpleSemaphore(2 ** 31)
 
+cdef bool loop_create_future = getattr(
+    asyncio.AbstractEventLoop, 'create_future', None
+) is not None
+
 
 cpdef create_future(loop):
-    try:
+    if loop_create_future:
         return loop.create_future()
-    except AttributeError:
+    else:
         return asyncio.Future(loop=loop)
 
 
@@ -366,6 +370,10 @@ cdef class AIOOperation:
 
             self.size = aio_return(self.cb)
             return self.buffer
+        except asyncio.CancelledError:
+            if self.is_running():
+                self.aio_cancel()
+            raise
         finally:
             semaphore.release()
 

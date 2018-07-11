@@ -121,3 +121,61 @@ Read file line by line
 
     loop = asyncio.get_event_loop()
     loop.run_until_complete(main())
+
+
+Reading and Writing for the unix pipe
++++++++++++++++++++++++++++++++++++++
+
+.. code-block:: python
+
+    import os
+    import asyncio
+    from aiofile import AIOFile, Reader, Writer
+
+
+    async def reader(fname):
+        print('Start reader')
+        async with AIOFile(fname, 'r') as afp:
+            while True:
+                # Maximum expected chunk size, must be passed.
+                # Otherwise will be read zero bytes
+                # (because unix pipe has zero size)
+                data = await afp.read(4096)
+                print(data)
+
+
+    async def writer(fname):
+        print('Start writer')
+        async with AIOFile(fname, 'w') as afp:
+            while True:
+                await asyncio.sleep(1)
+                await afp.write('%06f' % loop.time())
+
+
+    async def main():
+        fifo_name = "/tmp/test.fifo"
+
+        if os.path.exists(fifo_name):
+            os.remove(fifo_name)
+
+        os.mkfifo(fifo_name)
+
+        # Starting two readers and one writer, but only one reader
+        # will be reading at the same time.
+        await asyncio.gather(
+            reader(fifo_name),
+            reader(fifo_name),
+            writer(fifo_name),
+        )
+
+
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+
+    try:
+        loop.run_until_complete(main())
+    finally:
+        # Shutting down and closing file descriptors after interrupt
+        loop.run_until_complete(loop.shutdown_asyncgens())
+        loop.close()
+        print('Exited')
