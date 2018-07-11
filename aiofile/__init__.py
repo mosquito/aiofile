@@ -13,12 +13,4 @@ __all__ = (
     'Reader',
     'LineReader',
     'Writer',
-    "__author__",
-    "__version__",
-    "author_info",
-    "package_info",
-    "package_license",
-    "project_home",
-    "team_email",
-    "version_info",
 )

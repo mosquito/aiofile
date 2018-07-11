@@ -179,3 +179,104 @@ Reading and Writing for the unix pipe
         loop.run_until_complete(loop.shutdown_asyncgens())
         loop.close()
         print('Exited')
+
+
+Read file line by line
+++++++++++++++++++++++
+
+.. code-block:: python
+
+    import asyncio
+    from aiofile import AIOFile, LineReader, Writer
+
+
+    async def main():
+        async with AIOFile("/tmp/hello.txt", 'w') as afp:
+            writer = Writer(afp)
+
+            for i in range(10):
+                await writer("%d Hello World\n" % i)
+
+            await writer("Tail-less string")
+
+
+        async with AIOFile("/tmp/hello.txt", 'r') as afp:
+            async for line in LineReader(afp):
+                print(line[:-1])
+
+
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(main())
+
+
+Async CSV Dict Reader
++++++++++++++++++++++
+
+.. code-block:: python
+
+    import asyncio
+    import io
+    from csv import DictReader
+
+    from aiofile import AIOFile, LineReader
+
+
+    class AsyncDictReader:
+        def __init__(self, afp, **kwargs):
+            self.buffer = io.BytesIO()
+            self.file_reader = LineReader(
+                afp, line_sep=kwargs.pop('line_sep', '\n'),
+                chunk_size=kwargs.pop('chunk_size', 4096),
+                offset=kwargs.pop('offset', 0),
+            )
+            self.reader = DictReader(
+                io.TextIOWrapper(
+                    self.buffer,
+                    encoding=kwargs.pop('encoding', 'utf-8'),
+                    errors=kwargs.pop('errors', 'replace'),
+                ), **kwargs,
+            )
+
+        async def __aiter__(self):
+            header = await self.file_reader.readline()
+
+            if header:
+                self.buffer.write(header)
+
+            return self
+
+        async def __anext__(self):
+            line = await self.file_reader.readline()
+
+            if not line:
+                raise StopAsyncIteration
+
+            self.buffer.write(line)
+            self.buffer.seek(0)
+
+            try:
+                result = next(self.reader)
+            except StopIteration as e:
+                raise StopAsyncIteration from e
+
+            self.buffer.truncate(0)
+
+            return result
+
+
+    async def main():
+        async with AIOFile('sample.csv', 'rb') as afp:
+            async for item in AsyncDictReader(afp, line_sep='\r'):
+                print(item)
+
+
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+
+
+    try:
+        loop.run_until_complete(main())
+    finally:
+        # Shutting down and closing file descriptors after interrupt
+        loop.run_until_complete(loop.shutdown_asyncgens())
+        loop.close()

@@ -65,20 +65,21 @@ class Writer:
 
 class LineReader:
     def __init__(self, aio_file: AIOFile, offset: int = 0,
-                 chunk_size: int = 255):
+                 chunk_size: int = 255, line_sep='\n'):
 
         self.__reader = Reader(aio_file, chunk_size=chunk_size, offset=offset)
         self._buffer = io.BytesIO() if aio_file.mode.binary else io.StringIO()
+        self.linesep = (
+            line_sep.encode() if self.__reader.file.mode.binary else line_sep
+        )
 
     @asyncio.coroutine
     def readline(self):
-        linesep = b'\n' if self.__reader.file.mode.binary else '\n'
-
         while True:
             chunk = yield from self.__reader.read_chunk()
 
             if chunk:
-                if linesep not in chunk:
+                if self.linesep not in chunk:
                     self._buffer.write(chunk)
                     continue
 
