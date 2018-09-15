@@ -1,5 +1,6 @@
 import asyncio
 import os
+from tempfile import TemporaryFile
 from uuid import uuid4
 from random import shuffle
 
@@ -237,3 +238,15 @@ def test_modes(aio_file_maker, event_loop, tmpdir):
     afp = yield from aio_file_maker(tmpfile, 'r+', loop=event_loop)
     assert (yield from afp.read()) == 'foo'
     yield from afp.close()
+
+
+@aio_impl
+def test_open_fd(aio_file_maker, event_loop, tmpdir):
+    with TemporaryFile() as fp:
+        afp = aio_file_maker("", loop=event_loop)
+        yield from afp.open_fd(fp.fileno())
+        yield from afp.write('foo')
+
+        afp = aio_file_maker("", loop=event_loop)
+        yield from afp.open_fd(fp.fileno())
+        yield from afp.read() == 'foo'

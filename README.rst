@@ -50,7 +50,7 @@ Write and Read
 .. code-block:: python
 
     import asyncio
-    from aiofile import AIOFile, Reader, Writer
+    from aiofile import AIOFile
 
 
     async def main():

@@ -158,6 +158,15 @@ class AIOFile:
             mode=self.__access_mode
         )
 
+    def open_fd(self, fd: int):
+        if self.__fileno == AIO_FILE_CLOSED:
+            raise asyncio.InvalidStateError('AIOFile closed')
+
+        if self.__fileno != AIO_FILE_NOT_OPENED:
+            raise RuntimeError('Already opened')
+
+        self.__fileno = fd
+
     def __repr__(self):
         return "<AIOFile: %r>" % self.__fname
 
