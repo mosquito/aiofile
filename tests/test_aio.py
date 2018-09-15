@@ -244,9 +244,9 @@ def test_modes(aio_file_maker, event_loop, tmpdir):
 def test_open_fd(aio_file_maker, event_loop, tmpdir):
     with TemporaryFile() as fp:
         afp = aio_file_maker("", mode=fp.mode, loop=event_loop)
-        yield from afp.open_fd(fp.fileno())
+        afp.open_fd(fp.fileno())
         yield from afp.write('foo')
 
         afp = aio_file_maker("", mode=fp.mode, loop=event_loop)
-        yield from afp.open_fd(fp.fileno())
+        afp.open_fd(fp.fileno())
         yield from afp.read() == 'foo'
