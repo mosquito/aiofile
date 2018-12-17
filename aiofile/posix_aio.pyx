@@ -358,6 +358,7 @@ cdef class AIOOperation:
 
                 with nogil:
                     result = aio_error(self.cb)
+                    error = errno
 
                 if result != 0:
                     raise SystemError(
@@ -374,11 +375,6 @@ cdef class AIOOperation:
 
                     if result == 0:
                         break
-                    elif result > 0:
-                        raise SystemError(
-                            errorcode[result],
-                            os.strerror(result)
-                        )
                     elif result == -1:
                         raise SystemError(
                             errorcode[error],

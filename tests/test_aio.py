@@ -249,4 +249,4 @@ def test_open_fd(aio_file_maker, event_loop, tmpdir):
 
         afp = aio_file_maker("", mode=fp.mode, loop=event_loop)
         afp.open_fd(fp.fileno())
-        yield from afp.read() == 'foo'
+        assert (yield from afp.read()) == 'foo'
