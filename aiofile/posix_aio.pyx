@@ -359,11 +359,11 @@ cdef class AIOOperation:
                 with nogil:
                     result = aio_error(self.cb)
 
-                    if result != 0:
-                        raise SystemError(
-                            errorcode[result],
-                            os.strerror(result)
-                        )
+                if result != 0:
+                    raise SystemError(
+                        errorcode[result],
+                        os.strerror(result)
+                    )
 
             # Polling aio_error when SIGEV_NONE (Mac OS X)
             elif self.cb.aio_sigevent.sigev_notify == SIGEV_NONE:

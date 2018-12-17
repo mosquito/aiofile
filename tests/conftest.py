@@ -36,7 +36,7 @@ def uuid():
     return str(uuid4())
 
 
-def pytest_ignore_collect(path, config):
+def pytest_ignore_collect(path):
     if 'test_py35' in str(path):
         if sys.version_info < (3, 5, 0):
             return True
