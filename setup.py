@@ -79,7 +79,7 @@ setup(
     extras_require={
         'develop': [
             'Cython',
-            'pytest',
+            'pytest<4',
             'pytest-cov',
             'pytest-asyncio<0.6',
         ],
