@@ -1,8 +1,10 @@
+import sys
+
 from cpython cimport bytes, bool
 from libc.errno cimport EAGAIN, EBADF, EINVAL, ENOSYS, EOVERFLOW, errno
 from libc.stdlib cimport calloc, free
-from libc.stdint cimport uint32_t, uint8_t
-from libc.string cimport memcpy, strerror
+from libc.stdint cimport uint32_t
+from libc.string cimport memcpy
 from posix.fcntl cimport O_DSYNC
 from posix.signal cimport sigevent
 from posix.signal cimport sigval, SIGEV_THREAD, SIGEV_NONE
@@ -10,6 +12,7 @@ from posix.types cimport off_t
 
 import asyncio
 import logging
+import os
 import platform
 from errno import errorcode
 
@@ -169,24 +172,32 @@ cpdef create_future(loop):
 cdef dict OP_MAP = dict()
 
 
+if sys.version_info < (3, 7):
+    def _run_coro(coro):
+        return coro.__iter__()
+else:
+    def _run_coro(coro):
+        return coro.__await__()
+
+
 cdef class AIOOperation:
     cdef aiocb* cb
     cdef char* __buffer
-    cdef unsigned int size
+    cdef int size
     cdef int __state
     cdef unsigned long long cid
     cdef object loop
-    cdef uint8_t __result
+    cdef object event
 
     cpdef _set_result(self):
-        self.__result = 1
+        self.loop.call_soon_threadsafe(self.event.set)
 
     def __cinit__(self, int opcode, int fd, off_t offset, int nbytes, loop):
         if opcode not in (LIO_READ, LIO_WRITE, LIO_NOP):
             raise ValueError("Invalid state")
 
         self.loop = loop
-        self.__result = 0
+        self.event = asyncio.Event(loop=self.loop)
         self.cid = id(self)
 
         with nogil:
@@ -212,6 +223,9 @@ cdef class AIOOperation:
 
     @property
     def buffer(self):
+        if self.__buffer == NULL:
+            raise RuntimeError('Null buffer access')
+
         return self.__buffer[:self.size]
 
     @buffer.setter
@@ -252,10 +266,7 @@ cdef class AIOOperation:
 
         raise SystemError(
             errorcode[error],
-            AIO_READ_ERRORS.get(
-                error,
-                strerror(error).decode()
-            )
+            AIO_READ_ERRORS.get(error, os.strerror(error))
         )
 
     cpdef aio_write(self):
@@ -278,10 +289,7 @@ cdef class AIOOperation:
 
         raise SystemError(
             errorcode[error],
-            AIO_WRITE_ERRORS.get(
-                error,
-                strerror(error).decode()
-            )
+            AIO_WRITE_ERRORS.get(error, os.strerror(error))
         )
 
     cpdef aio_fsync(self):
@@ -304,10 +312,7 @@ cdef class AIOOperation:
 
         raise SystemError(
             errorcode[error],
-            AIO_FSYNC_ERRORS.get(
-                error,
-                strerror(error).decode()
-            )
+            AIO_FSYNC_ERRORS.get(error, os.strerror(error))
         )
 
     cpdef aio_cancel(self):
@@ -349,26 +354,46 @@ cdef class AIOOperation:
 
             # Awaiting callback when SIGEV_THREAD  (Linux)
             if self.cb.aio_sigevent.sigev_notify == SIGEV_THREAD:
-                while self.__result == 0:
-                    yield
+                yield from _run_coro(self.event.wait())
+
+                with nogil:
+                    result = aio_error(self.cb)
+
+                    if result != 0:
+                        raise SystemError(
+                            errorcode[result],
+                            os.strerror(result)
+                        )
 
             # Polling aio_error when SIGEV_NONE (Mac OS X)
             elif self.cb.aio_sigevent.sigev_notify == SIGEV_NONE:
                 while True:
-
                     with nogil:
                         result = aio_error(self.cb)
                         error = errno
 
                     if result == 0:
-                        self.__state = AIO_OP_DONE
                         break
+                    elif result > 0:
+                        raise SystemError(
+                            errorcode[result],
+                            os.strerror(result)
+                        )
                     elif result == -1:
-                        raise SystemError(errorcode[error], strerror(error).decode())
+                        raise SystemError(
+                            errorcode[error],
+                            os.strerror(error)
+                        )
                     else:
                         yield
 
-            self.size = aio_return(self.cb)
+            self.__state = AIO_OP_DONE
+
+            rresult = aio_return(self.cb)
+            if rresult < 0:
+                raise SystemError(errorcode[-rresult], os.strerror(-rresult))
+
+            self.size = rresult
             return self.buffer
         except asyncio.CancelledError:
             if self.is_running():
