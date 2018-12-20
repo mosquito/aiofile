@@ -1,3 +1,4 @@
+import json
 import os
 import asyncio
 from random import shuffle
@@ -167,7 +168,7 @@ async def test_parallel_writer_ordering(aio_file_maker, temp_file, uuid):
 @aio_impl
 async def test_non_existent_file_ctx(aio_file_maker):
     with pytest.raises(FileNotFoundError):
-        async with AIOFile("/c/windows/NonExistent.file", 'r'):
+        async with aio_file_maker("/c/windows/NonExistent.file", 'r'):
             pass
 
 
@@ -238,3 +239,14 @@ async def test_modes(aio_file_maker, event_loop, tmpdir):
 
     async with aio_file_maker(tmpfile, 'r+', loop=event_loop) as afp:
         assert await afp.read() == 'foo'
+
+    data = dict((str(i), i)for i in range(1000))
+
+    tmpfile = tmpdir.join('test.json')
+    async with aio_file_maker(tmpfile, 'w', loop=event_loop) as afp:
+        await afp.write(json.dumps(data, indent=1))
+
+    async with aio_file_maker(tmpfile, 'r', loop=event_loop) as afp:
+        result = json.loads(await afp.read())
+
+    assert result == data
