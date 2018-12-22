@@ -15,7 +15,6 @@ steps:
     commands:
       - tox
     environment:
-      AMQP_URL: amqp://guest:guest@rabbitmq
       TOXENV: py35
       COVERALLS_REPO_TOKEN:
         from_secret: COVERALLS_TOKEN
@@ -28,7 +27,6 @@ steps:
     commands:
       - tox
     environment:
-      AMQP_URL: amqp://guest:guest@rabbitmq
       TOXENV: py36
       COVERALLS_REPO_TOKEN:
         from_secret: COVERALLS_TOKEN
@@ -41,26 +39,9 @@ steps:
     commands:
       - tox
     environment:
-      AMQP_URL: amqp://guest:guest@rabbitmq
       TOXENV: py37
       COVERALLS_REPO_TOKEN:
         from_secret: COVERALLS_TOKEN
-    when:
-      branch:
-        - master
-
-
-services:
-  - name: rabbitmq
-    image: rabbitmq:3-alpine
-    environment:
-      - RABBITMQ_SSL_CERTFILE=/certs/server.pem
-      - RABBITMQ_SSL_KEYFILE=/certs/server.key
-      - RABBITMQ_SSL_CACERTFILE=/certs/CA.pem
-      - RABBITMQ_DEFAULT_USER=guest
-      - RABBITMQ_DEFAULT_PASS=guest
-    volumes:
-      - tests/certs:/certs
     when:
       branch:
         - master
