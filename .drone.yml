@@ -1,0 +1,66 @@
+kind: pipeline
+name: default
+
+
+steps:
+  - name: linter
+    image: snakepacker/python:all
+    commands:
+      - tox
+    environment:
+      TOXENV: lint
+
+  - name: python 3.5
+    image: snakepacker/python:all
+    commands:
+      - tox
+    environment:
+      AMQP_URL: amqp://guest:guest@rabbitmq
+      TOXENV: py35
+      COVERALLS_REPO_TOKEN:
+        from_secret: COVERALLS_TOKEN
+    when:
+      branch:
+        - master
+
+  - name: python 3.6
+    image: snakepacker/python:all
+    commands:
+      - tox
+    environment:
+      AMQP_URL: amqp://guest:guest@rabbitmq
+      TOXENV: py36
+      COVERALLS_REPO_TOKEN:
+        from_secret: COVERALLS_TOKEN
+    when:
+      branch:
+        - master
+
+  - name: python 3.7
+    image: snakepacker/python:all
+    commands:
+      - tox
+    environment:
+      AMQP_URL: amqp://guest:guest@rabbitmq
+      TOXENV: py37
+      COVERALLS_REPO_TOKEN:
+        from_secret: COVERALLS_TOKEN
+    when:
+      branch:
+        - master
+
+
+services:
+  - name: rabbitmq
+    image: rabbitmq:3-alpine
+    environment:
+      - RABBITMQ_SSL_CERTFILE=/certs/server.pem
+      - RABBITMQ_SSL_KEYFILE=/certs/server.key
+      - RABBITMQ_SSL_CACERTFILE=/certs/CA.pem
+      - RABBITMQ_DEFAULT_USER=guest
+      - RABBITMQ_DEFAULT_PASS=guest
+    volumes:
+      - tests/certs:/certs
+    when:
+      branch:
+        - master

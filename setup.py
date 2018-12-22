@@ -5,7 +5,10 @@ from os import path
 from importlib.machinery import SourceFileLoader
 
 
-module = SourceFileLoader("version", path.join("aiofile", "version.py")).load_module()
+module = SourceFileLoader(
+    "version", path.join("aiofile", "version.py")
+).load_module()
+
 libraries = []
 
 
@@ -67,7 +70,6 @@ setup(
         'Programming Language :: Cython',
         'Programming Language :: Python',
         'Programming Language :: Python :: 3 :: Only',
-        'Programming Language :: Python :: 3.4',
         'Programming Language :: Python :: 3.5',
         'Programming Language :: Python :: 3.6',
         'Programming Language :: Python :: Implementation :: CPython',
@@ -79,9 +81,9 @@ setup(
     extras_require={
         'develop': [
             'Cython',
-            'pytest<4',
+            'pytest>4,<5',
+            'pytest-asyncio~=0.9.0',
             'pytest-cov',
-            'pytest-asyncio<0.6',
         ],
         ':python_version < "3.5"': 'typing >= 3.5.3',
     },

@@ -41,7 +41,7 @@ FileMode = namedtuple('FileMode', (
 def parse_mode(mode: str):
     """ Rewritten from `cpython fileno`_
 
-    .. _cpython fileio: https://github.com/python/cpython/blob/55edd0c185ad2d895b5d73e47d67049bc156b654/Modules/_io/fileio.c#L289
+    .. _cpython fileio: https://bit.ly/2JY2cnp
     """
 
     flags = os.O_RDONLY
@@ -142,15 +142,14 @@ class AIOFile:
     def loop(self):
         return self.__loop
 
-    @asyncio.coroutine
-    def open(self):
+    async def open(self):
         if self.__fileno == AIO_FILE_CLOSED:
             raise asyncio.InvalidStateError('AIOFile closed')
 
         if self.__fileno != AIO_FILE_NOT_OPENED:
             return
 
-        self.__fileno = yield from run_in_thread(
+        self.__fileno = await run_in_thread(
             os.open,
             self.__fname,
             loop=self.__loop,
@@ -170,38 +169,31 @@ class AIOFile:
     def __repr__(self):
         return "<AIOFile: %r>" % self.__fname
 
-    @asyncio.coroutine
-    def close(self):
+    async def close(self):
         if self.__fileno < 0:
             return
 
         if self.mode.writable:
-            yield from self.fsync()
+            await self.fsync()
 
-        yield from run_in_thread(os.close, self.__fileno, loop=self.__loop)
+        await run_in_thread(os.close, self.__fileno, loop=self.__loop)
         self.__fileno = AIO_FILE_CLOSED
 
     def fileno(self):
         return self.__fileno
 
-    def __iter__(self):
-        yield from self.open()
-        return self
-
     def __await__(self):
-        yield from self.open()
+        yield from self.open().__await__()
         return self
 
-    @asyncio.coroutine
-    def __aenter__(self):
-        yield from self.open()
+    async def __aenter__(self):
+        await self.open()
         return self
 
     def __aexit__(self, *args):
         return self.__loop.create_task(self.close())
 
-    @asyncio.coroutine
-    def read(self, size: int=-1, offset: int=0) -> ReadResultType:
+    async def read(self, size: int=-1, offset: int=0) -> ReadResultType:
 
         if self.__fileno < 0:
             raise asyncio.InvalidStateError('AIOFile closed')
@@ -211,14 +203,14 @@ class AIOFile:
 
         if size == -1:
             size = (
-                yield from run_in_thread(
+                await run_in_thread(
                     os.stat,
                     self.__fileno,
                     loop=self.loop
                 )
             ).st_size
 
-        data = yield from self.OPERATION_CLASS(
+        data = await self.OPERATION_CLASS(
             self.IO_READ,
             self.__fileno,
             offset,
@@ -228,8 +220,7 @@ class AIOFile:
 
         return data if self.mode.binary else data.decode(self.__encoding)
 
-    @asyncio.coroutine
-    def write(self, data: (str, bytes), offset: int=0):
+    async def write(self, data: (str, bytes), offset: int=0):
         if self.__fileno < 0:
             raise asyncio.InvalidStateError('AIOFile closed')
 
@@ -251,15 +242,14 @@ class AIOFile:
         )
 
         op.buffer = bytes_data
-        return (yield from op)
+        return (await op)
 
-    @asyncio.coroutine
-    def fsync(self):
+    async def fsync(self):
         if self.__fileno < 0:
             raise asyncio.InvalidStateError('AIOFile closed')
 
         return (
-            yield from self.OPERATION_CLASS(
+            await self.OPERATION_CLASS(
                 self.IO_NOP,
                 self.__fileno, 0, 0,
                 self.__loop

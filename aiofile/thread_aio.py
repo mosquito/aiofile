@@ -55,7 +55,7 @@ class ThreadedAIOOperation:
 
             _LOCKS.pop(self.__fd)
 
-    def __iter__(self):
+    def __await__(self):
         if self.__state is not None:
             raise RuntimeError('Invalid state')
 
@@ -66,9 +66,6 @@ class ThreadedAIOOperation:
 
         self.__state = True
         return result
-
-    def __await__(self):
-        return self.__iter__()
 
     def done(self) -> bool:
         return self.__state is True

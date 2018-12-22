@@ -1,10 +1,11 @@
 import asyncio
 import io
+from collections.abc import AsyncIterable
 
 from .aio import AIOFile
 
 
-class Reader:
+class Reader(AsyncIterable):
     __slots__ = '_chunk_size', '__offset', 'file', '__lock'
 
     def __init__(self, aio_file: AIOFile,
@@ -15,10 +16,9 @@ class Reader:
         self.file = aio_file
         self.__lock = asyncio.Lock(loop=self.file.loop)
 
-    @asyncio.coroutine
-    def read_chunk(self):
-        with (yield from self.__lock):
-            chunk = yield from self.file.read(
+    async def read_chunk(self):
+        async with self.__lock:
+            chunk = await self.file.read(
                 self._chunk_size,
                 self.__offset
             )
@@ -28,9 +28,8 @@ class Reader:
 
             return chunk
 
-    @asyncio.coroutine
-    def __anext__(self):
-        chunk = yield from self.read_chunk()
+    async def __anext__(self):
+        chunk = await self.read_chunk()
 
         if not chunk:
             raise StopAsyncIteration(chunk)
@@ -38,13 +37,6 @@ class Reader:
         return chunk
 
     def __aiter__(self):
-        return self
-
-    @asyncio.coroutine
-    def __next__(self):
-        return (yield from self.read_chunk())
-
-    def __iter__(self):
         return self
 
 
@@ -56,14 +48,13 @@ class Writer:
         self.__aio_file = aio_file
         self.__lock = asyncio.Lock(loop=self.__aio_file.loop)
 
-    @asyncio.coroutine
-    def __call__(self, data):
-        with (yield from self.__lock):
-            yield from self.__aio_file.write(data, self.__offset)
+    async def __call__(self, data):
+        async with self.__lock:
+            await self.__aio_file.write(data, self.__offset)
             self.__offset += len(data)
 
 
-class LineReader:
+class LineReader(AsyncIterable):
     def __init__(self, aio_file: AIOFile, offset: int = 0,
                  chunk_size: int = 255, line_sep='\n'):
 
@@ -73,10 +64,9 @@ class LineReader:
             line_sep.encode() if self.__reader.file.mode.binary else line_sep
         )
 
-    @asyncio.coroutine
-    def readline(self):
+    async def readline(self):
         while True:
-            chunk = yield from self.__reader.read_chunk()
+            chunk = await self.__reader.read_chunk()
 
             if chunk:
                 if self.linesep not in chunk:
@@ -95,9 +85,8 @@ class LineReader:
 
             return line
 
-    @asyncio.coroutine
-    def __anext__(self):
-        line = yield from self.readline()
+    async def __anext__(self):
+        line = await self.readline()
 
         if not line:
             raise StopAsyncIteration(line)
@@ -105,11 +94,4 @@ class LineReader:
         return line
 
     def __aiter__(self):
-        return self
-
-    @asyncio.coroutine
-    def __next__(self):
-        return (yield from self.readline())
-
-    def __iter__(self):
         return self

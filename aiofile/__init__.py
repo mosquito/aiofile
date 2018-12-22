@@ -9,8 +9,16 @@ from .aio import AIOFile
 
 
 __all__ = (
+    '__author__',
+    '__version__',
+    'author_info',
+    'package_info',
     'AIOFile',
-    'Reader',
     'LineReader',
+    'package_license',
+    'project_home',
+    'Reader',
+    'team_email',
+    'version_info',
     'Writer',
 )
