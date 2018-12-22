@@ -156,19 +156,6 @@ cdef class SimpleSemaphore:
 
 
 cdef object semaphore = SimpleSemaphore(2 ** 31)
-
-cdef bool loop_create_future = getattr(
-    asyncio.AbstractEventLoop, 'create_future', None
-) is not None
-
-
-cpdef create_future(loop):
-    if loop_create_future:
-        return loop.create_future()
-    else:
-        return asyncio.Future(loop=loop)
-
-
 cdef dict OP_MAP = dict()
 
 
@@ -318,7 +305,7 @@ cdef class AIOOperation:
     cpdef aio_cancel(self):
         aio_cancel(self.cb.aio_fildes, self.cb)
 
-    def __iter__(self):
+    def __await__(self):
         cdef int result = 0
         cdef int error = 0
 
@@ -403,9 +390,6 @@ cdef class AIOOperation:
 
     cpdef bool is_running(self):
         return self.__state == AIO_OP_RUN
-
-    def __await__(self):
-        return self.__iter__()
 
     cpdef void close(self):
         if self.__state == AIO_OP_CLOSED:

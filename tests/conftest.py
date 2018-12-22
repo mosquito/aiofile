@@ -1,19 +1,14 @@
 import pytest
 import asyncio
-import sys
 from uuid import uuid4
 from tempfile import NamedTemporaryFile
 
 
-try:
-    from aiomisc.utils import new_event_loop
-except ImportError:
-    from asyncio import new_event_loop
-
-
-@pytest.yield_fixture()
+@pytest.fixture()
 def event_loop():
-    loop = new_event_loop()
+    asyncio.get_event_loop().close()
+
+    loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
 
     try:
@@ -34,9 +29,3 @@ def temp_file():
 @pytest.fixture()
 def uuid():
     return str(uuid4())
-
-
-def pytest_ignore_collect(path):
-    if 'test_py35' in str(path):
-        if sys.version_info < (3, 5, 0):
-            return True

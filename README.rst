@@ -1,9 +1,9 @@
 AIOFile
 =======
 
-.. image:: https://travis-ci.org/mosquito/aiofile.svg
-    :target: https://travis-ci.org/mosquito/aiofile
-    :alt: Travis CI
+.. image:: https://cloud.drone.io/api/badges/mosquito/aio-pika/status.svg
+    :target: https://cloud.drone.io/mosquito/aiofile
+    :alt: Drone CI
 
 .. image:: https://img.shields.io/pypi/v/aiofile.svg
     :target: https://pypi.python.org/pypi/aiofile/

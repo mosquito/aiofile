@@ -1,0 +1,47 @@
+kind: pipeline
+name: default
+
+
+steps:
+  - name: linter
+    image: snakepacker/python:all
+    commands:
+      - tox
+    environment:
+      TOXENV: lint
+
+  - name: python 3.5
+    image: snakepacker/python:all
+    commands:
+      - tox
+    environment:
+      TOXENV: py35
+      COVERALLS_REPO_TOKEN:
+        from_secret: COVERALLS_TOKEN
+    when:
+      branch:
+        - master
+
+  - name: python 3.6
+    image: snakepacker/python:all
+    commands:
+      - tox
+    environment:
+      TOXENV: py36
+      COVERALLS_REPO_TOKEN:
+        from_secret: COVERALLS_TOKEN
+    when:
+      branch:
+        - master
+
+  - name: python 3.7
+    image: snakepacker/python:all
+    commands:
+      - tox
+    environment:
+      TOXENV: py37
+      COVERALLS_REPO_TOKEN:
+        from_secret: COVERALLS_TOKEN
+    when:
+      branch:
+        - master
