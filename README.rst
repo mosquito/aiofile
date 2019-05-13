@@ -236,16 +236,16 @@ Async CSV Dict Reader
                     errors=kwargs.pop('errors', 'replace'),
                 ), **kwargs,
             )
+            self.line_num = 0
 
-        async def __aiter__(self):
-            header = await self.file_reader.readline()
-
-            if header:
-                self.buffer.write(header)
-
+        def __aiter__(self):
             return self
 
         async def __anext__(self):
+            if self.line_num == 0:
+                header = await self.file_reader.readline()
+                self.buffer.write(header)
+
             line = await self.file_reader.readline()
 
             if not line:
@@ -259,7 +259,9 @@ Async CSV Dict Reader
             except StopIteration as e:
                 raise StopAsyncIteration from e
 
+            self.buffer.seek(0)
             self.buffer.truncate(0)
+            self.line_num = self.reader.line_num
 
             return result
 
