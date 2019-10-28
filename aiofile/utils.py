@@ -61,7 +61,10 @@ class Writer:
     async def __call__(self, data):
         async with self.__lock:
             await self.__aio_file.write(data, self.__offset)
-            self.__offset += len(data)
+            if isinstance(data, str):
+                self.__offset += len(data.encode())
+            else:
+                self.__offset += len(data)
 
 
 class LineReader(AsyncIterable):

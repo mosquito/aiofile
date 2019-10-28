@@ -257,3 +257,16 @@ async def test_unicode_reader(aio_file_maker, temp_file):
         reader = Reader(afp, chunk_size=1)
         assert await reader.read_chunk() == '한'
         assert await reader.read_chunk() == '글'
+
+
+@aio_impl
+async def test_unicode_writer(aio_file_maker, temp_file):
+    async with aio_file_maker(temp_file, 'w+') as afp:
+        writer = Writer(afp)
+        await writer('한')
+        await writer('글')
+
+    async with aio_file_maker(temp_file, 'r') as afp:
+        reader = Reader(afp, chunk_size=1)
+        assert await reader.read_chunk() == '한'
+        assert await reader.read_chunk() == '글'
