@@ -1,6 +1,6 @@
+import asyncio
 import json
 import os
-import asyncio
 from io import BytesIO
 from random import shuffle
 from uuid import uuid4
@@ -246,3 +246,14 @@ async def test_modes(aio_file_maker, event_loop, tmpdir):
         result = json.loads(await afp.read())
 
     assert result == data
+
+
+@aio_impl
+async def test_unicode_reader(aio_file_maker, temp_file):
+    async with aio_file_maker(temp_file, 'w+') as afp:
+        await afp.write('한글')
+
+    async with aio_file_maker(temp_file, 'r') as afp:
+        reader = Reader(afp, chunk_size=1)
+        assert await reader.read_chunk() == '한'
+        assert await reader.read_chunk() == '글'
