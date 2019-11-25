@@ -81,8 +81,8 @@ setup(
     extras_require={
         'develop': [
             'Cython',
-            'pytest==4.0.2',
-            'pytest-asyncio~=0.9.0',
+            'pytest',
+            'pytest-asyncio',
             'pytest-cov',
         ],
         ':python_version < "3.5"': 'typing >= 3.5.3',
