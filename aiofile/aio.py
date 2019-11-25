@@ -94,6 +94,8 @@ def parse_mode(mode: str):
 
         if m == 'b':
             binary = True
+            if hasattr(os, 'O_BINARY'):
+                flags |= os.O_BINARY
 
     if readable and writable:
         flags |= os.O_RDWR
