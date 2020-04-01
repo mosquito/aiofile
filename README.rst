@@ -135,7 +135,7 @@ Reading and Writing for the unix pipe
 
     async def reader(fname):
         print('Start reader')
-        async with AIOFile(fname, 'a') as afp:
+        async with AIOFile(fname, 'r') as afp:
             while True:
                 # Maximum expected chunk size, must be passed.
                 # Otherwise will be read zero bytes
