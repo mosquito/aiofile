@@ -12,40 +12,10 @@ module = SourceFileLoader(
 libraries = []
 
 
-if platform == 'linux':
-    libraries.append('rt')
-
-if platform in ('linux', 'darwin'):
-    try:
-        from Cython.Build import cythonize
-
-        extensions = cythonize([
-            Extension(
-                "aiofile.posix_aio",
-                ["aiofile/posix_aio.pyx"],
-                libraries=libraries,
-            ),
-        ], force=True, emit_linenums=False, quiet=True)
-
-    except ImportError:
-        extensions = [
-            Extension(
-                "aiofile.posix_aio",
-                ["aiofile/posix_aio.c"],
-                libraries=libraries,
-            ),
-        ]
-else:
-    extensions = []
-
-
 setup(
     name='aiofile',
-    ext_modules=extensions,
     version=module.__version__,
-    packages=[
-        'aiofile',
-    ],
+    packages=['aiofile'],
     license=module.package_license,
     description=module.package_info,
     long_description=open("README.rst").read(),
@@ -80,11 +50,11 @@ setup(
     python_requires=">3.4.*, <4",
     extras_require={
         'develop': [
-            'Cython',
+            'aiomisc',
             'pytest',
-            'pytest-asyncio',
             'pytest-cov',
         ],
         ':python_version < "3.5"': 'typing >= 3.5.3',
     },
+    install_requires=["caio"],
 )

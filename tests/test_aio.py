@@ -8,10 +8,23 @@ from uuid import uuid4
 import pytest
 
 from aiofile.utils import Reader, Writer, LineReader
-from .impl import aio_impl, split_by
+from .impl import split_by
 
 
-@aio_impl
+@pytest.fixture
+def temp_file(tmp_path):
+    path = str(tmp_path / 'file.bin')
+    with open(path, "wb"):
+        pass
+
+    return path
+
+
+@pytest.fixture
+def uuid(tmp_path):
+    return str(uuid4())
+
+
 async def test_read(aio_file_maker, temp_file, uuid):
     with open(temp_file, "w") as f:
         f.write(uuid)
@@ -23,7 +36,6 @@ async def test_read(aio_file_maker, temp_file, uuid):
     assert data == uuid
 
 
-@aio_impl
 async def test_read_write(aio_file_maker, temp_file, uuid):
     r_file = await aio_file_maker(temp_file, 'r')
     w_file = await aio_file_maker(temp_file, 'w')
@@ -36,7 +48,6 @@ async def test_read_write(aio_file_maker, temp_file, uuid):
     assert data == uuid
 
 
-@aio_impl
 async def test_read_offset(aio_file_maker, temp_file, uuid):
     with open(temp_file, "w") as f:
         for _ in range(10):
@@ -52,7 +63,6 @@ async def test_read_offset(aio_file_maker, temp_file, uuid):
     assert data == uuid
 
 
-@aio_impl
 async def test_read_write_offset(aio_file_maker, temp_file, uuid):
     r_file = await aio_file_maker(temp_file, 'r')
     w_file = await aio_file_maker(temp_file, 'w')
@@ -70,7 +80,6 @@ async def test_read_write_offset(aio_file_maker, temp_file, uuid):
     assert data == uuid
 
 
-@aio_impl
 async def test_reader_writer(aio_file_maker, temp_file, uuid):
     r_file = await aio_file_maker(temp_file, 'rb')
     w_file = await aio_file_maker(temp_file, 'wb')
@@ -94,7 +103,6 @@ async def test_reader_writer(aio_file_maker, temp_file, uuid):
     assert not buff.read()
 
 
-@aio_impl
 async def test_reader_writer2(aio_file_maker, temp_file, uuid):
     r_file = await aio_file_maker(temp_file, 'r')
     w_file = await aio_file_maker(temp_file, 'w')
@@ -110,7 +118,6 @@ async def test_reader_writer2(aio_file_maker, temp_file, uuid):
         assert chunk == uuid
 
 
-@aio_impl
 async def test_parallel_writer(aio_file_maker, temp_file, uuid):
     w_file = await aio_file_maker(temp_file, 'w')
     r_file = await aio_file_maker(temp_file, 'r')
@@ -133,7 +140,6 @@ async def test_parallel_writer(aio_file_maker, temp_file, uuid):
     assert count == 1000
 
 
-@aio_impl
 async def test_parallel_writer_ordering(aio_file_maker, temp_file, uuid):
     w_file = await aio_file_maker(temp_file, 'wb')
     r_file = await aio_file_maker(temp_file, 'rb')
@@ -161,14 +167,12 @@ async def test_parallel_writer_ordering(aio_file_maker, temp_file, uuid):
     assert data == result
 
 
-@aio_impl
 async def test_non_existent_file_ctx(aio_file_maker):
     with pytest.raises(FileNotFoundError):
         async with aio_file_maker("/c/windows/NonExistent.file", 'r'):
             pass
 
 
-@aio_impl
 async def test_line_reader(aio_file_maker, temp_file, uuid):
     afp = await aio_file_maker(temp_file, 'w+')
 
@@ -188,7 +192,6 @@ async def test_line_reader(aio_file_maker, temp_file, uuid):
     assert lines == read_lines
 
 
-@aio_impl
 async def test_line_reader_one_line(aio_file_maker, temp_file):
     afp = await aio_file_maker(temp_file, 'w+')
 
@@ -206,7 +209,6 @@ async def test_line_reader_one_line(aio_file_maker, temp_file):
     assert payload == read_lines[0]
 
 
-@aio_impl
 async def test_truncate(aio_file_maker, temp_file):
     afp = await aio_file_maker(temp_file, 'w+')
 
@@ -220,29 +222,28 @@ async def test_truncate(aio_file_maker, temp_file):
     assert (await afp.read()) == ''
 
 
-@aio_impl
-async def test_modes(aio_file_maker, event_loop, tmpdir):
+async def test_modes(aio_file_maker, loop, tmpdir):
     tmpfile = tmpdir.join('test.txt')
 
-    async with aio_file_maker(tmpfile, 'w', loop=event_loop) as afp:
+    async with aio_file_maker(tmpfile, 'w', loop=loop) as afp:
         await afp.write('foo')
 
-    async with aio_file_maker(tmpfile, 'r', loop=event_loop) as afp:
+    async with aio_file_maker(tmpfile, 'r', loop=loop) as afp:
         assert await afp.read() == 'foo'
 
-    async with aio_file_maker(tmpfile, 'a+', loop=event_loop) as afp:
+    async with aio_file_maker(tmpfile, 'a+', loop=loop) as afp:
         assert await afp.read() == 'foo'
 
-    async with aio_file_maker(tmpfile, 'r+', loop=event_loop) as afp:
+    async with aio_file_maker(tmpfile, 'r+', loop=loop) as afp:
         assert await afp.read() == 'foo'
 
     data = dict((str(i), i)for i in range(1000))
 
     tmpfile = tmpdir.join('test.json')
-    async with aio_file_maker(tmpfile, 'w', loop=event_loop) as afp:
+    async with aio_file_maker(tmpfile, 'w', loop=loop) as afp:
         await afp.write(json.dumps(data, indent=1))
 
-    async with aio_file_maker(tmpfile, 'r', loop=event_loop) as afp:
+    async with aio_file_maker(tmpfile, 'r', loop=loop) as afp:
         result = json.loads(await afp.read())
 
     assert result == data

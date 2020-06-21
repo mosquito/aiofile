@@ -1,31 +1,31 @@
 import pytest
-import asyncio
-from uuid import uuid4
-from tempfile import NamedTemporaryFile
+
+from caio import python_aio_asyncio
+
+try:
+    from caio import thread_aio_asyncio
+except ImportError:
+    thread_aio_asyncio = None
+
+try:
+    from caio import linux_aio_asyncio
+except ImportError:
+    linux_aio_asyncio = None
 
 
-@pytest.fixture()
-def event_loop():
-    asyncio.get_event_loop().close()
-
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-
-    try:
-        yield loop
-    finally:
-        loop.close()
+from aiofile import AIOFile
 
 
-@pytest.yield_fixture()
-def temp_file():
-    temp = NamedTemporaryFile()
-    try:
-        yield temp.name
-    finally:
-        temp.close()
+IMPLEMENTATIONS = list(filter(None, [
+    linux_aio_asyncio,
+    thread_aio_asyncio,
+    python_aio_asyncio,
+]))
 
 
-@pytest.fixture()
-def uuid():
-    return str(uuid4())
+@pytest.fixture(scope="session", params=IMPLEMENTATIONS)
+def aio_file_maker(request):
+    class AIOFileCustom(AIOFile):
+        CONTEXT_IMPL = request.param.AsyncioContext
+
+    return AIOFileCustom
