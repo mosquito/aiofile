@@ -23,7 +23,7 @@ setup(
     author=module.__author__,
     author_email=module.team_email,
     provides=["aiofile"],
-    keywords=["aio", "python", "asyncio", "cython", "fileio", "io"],
+    keywords=["aio", "python", "asyncio", "fileio", "io"],
     classifiers=[
         "Development Status :: 5 - Production/Stable",
         "Environment :: Console",
@@ -35,7 +35,6 @@ setup(
         "Natural Language :: Russian",
         "Operating System :: POSIX :: Linux",
         "Operating System :: MacOS :: MacOS X",
-        "Programming Language :: Cython",
         "Programming Language :: Python",
         "Programming Language :: Python :: 3 :: Only",
         "Programming Language :: Python :: 3.5",
