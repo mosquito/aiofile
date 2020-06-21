@@ -1,16 +1,18 @@
 import asyncio
 import io
-from collections.abc import AsyncIterable
 import typing
+from collections.abc import AsyncIterable
 
 from .aio import AIOFile
 
 
 class Reader(AsyncIterable):
-    __slots__ = '_chunk_size', '__offset', 'file', '__lock'
+    __slots__ = "_chunk_size", "__offset", "file", "__lock"
 
-    def __init__(self, aio_file: AIOFile,
-                 offset: int = 0, chunk_size: int = 32 * 1024):
+    def __init__(
+        self, aio_file: AIOFile,
+        offset: int = 0, chunk_size: int = 32 * 1024,
+    ):
 
         self._chunk_size = int(chunk_size)
         self.__offset = int(offset)
@@ -21,7 +23,7 @@ class Reader(AsyncIterable):
         async with self.__lock:
             chunk = await self.file.read(
                 self._chunk_size,
-                self.__offset
+                self.__offset,
             )
 
             chunk_size = len(chunk)
@@ -42,7 +44,7 @@ class Reader(AsyncIterable):
 
 
 class Writer:
-    __slots__ = '__chunk_size', '__offset', '__aio_file', '__lock'
+    __slots__ = "__chunk_size", "__offset", "__aio_file", "__lock"
 
     def __init__(self, aio_file: AIOFile, offset: int = 0):
         self.__offset = int(offset)
@@ -56,8 +58,10 @@ class Writer:
 
 
 class LineReader(AsyncIterable):
-    def __init__(self, aio_file: AIOFile, offset: int = 0,
-                 chunk_size: int = 255, line_sep: str = '\n'):
+    def __init__(
+        self, aio_file: AIOFile, offset: int = 0,
+        chunk_size: int = 255, line_sep: str = "\n",
+    ):
 
         self.__reader = Reader(aio_file, chunk_size=chunk_size, offset=offset)
         self._buffer = (

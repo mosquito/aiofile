@@ -1,13 +1,13 @@
 author_info = (
-    ('Dmitry Orlov', 'me@mosquito.su'),
+    ("Dmitry Orlov", "me@mosquito.su"),
 )
 
-project_home = 'http://github.com/mosquito/aiofile'
+project_home = "http://github.com/mosquito/aiofile"
 
 package_info = "Asynchronous file operations."
 package_license = "Apache 2"
 
-team_email = 'me@mosquito.su'
+team_email = "me@mosquito.su"
 
 version_info = (2, 0, 0)
 

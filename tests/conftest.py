@@ -2,7 +2,9 @@ from functools import partial
 
 import pytest
 
+from aiofile import AIOFile
 from caio import python_aio_asyncio
+
 
 try:
     from caio import thread_aio_asyncio
@@ -15,19 +17,22 @@ except ImportError:
     linux_aio_asyncio = None
 
 
-from aiofile import AIOFile
 
 
 class DefaultContext:
-    __name__ = 'default'
+    __name__ = "default"
 
 
-IMPLEMENTATIONS = list(filter(None, [
-    linux_aio_asyncio,
-    thread_aio_asyncio,
-    python_aio_asyncio,
-    DefaultContext()
-]))
+IMPLEMENTATIONS = list(
+    filter(
+        None, [
+            linux_aio_asyncio,
+            thread_aio_asyncio,
+            python_aio_asyncio,
+            DefaultContext(),
+        ],
+    ),
+)
 
 IMPLEMENTATION_NAMES = map(lambda x: x.__name__, IMPLEMENTATIONS)
 
