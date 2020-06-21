@@ -1,4 +1,4 @@
-from setuptools import setup, Extension
+from setuptools import setup
 from os import path
 
 from importlib.machinery import SourceFileLoader
