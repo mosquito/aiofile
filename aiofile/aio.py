@@ -3,6 +3,7 @@ import asyncio
 from collections import namedtuple
 from functools import partial
 from typing import Generator, Any, Union
+from weakref import finalize
 
 import caio
 
@@ -104,13 +105,11 @@ def parse_mode(mode: str):
 
 
 class AIOFile:
-    CONTEXT_IMPL = caio.AsyncioContext
-
     def __init__(self, filename: str, mode: str = "r",
-                 access_mode: int = 0o644, loop=None,
-                 encoding: str = 'utf-8'):
+                 access_mode: int = 0o644, encoding: str = 'utf-8',
+                 context=None):
 
-        self.__context = self.CONTEXT_IMPL(loop=loop)
+        self.__context = context or get_default_context()
 
         self.mode = parse_mode(mode)
 
@@ -165,7 +164,6 @@ class AIOFile:
         if self.mode.writable:
             await self.fsync()
 
-        await self.__context.close()
         await self._run_in_thread(os.close, self.__fileno)
         self.__fileno = AIO_FILE_CLOSED
 
@@ -230,3 +228,26 @@ class AIOFile:
             self.__fileno,
             length,
         )
+
+
+DEFAULT_CONTEXT_STORE = {}
+
+
+def create_context(
+        max_requests=caio.AsyncioContext.MAX_REQUESTS_DEFAULT
+) -> caio.AsyncioContext:
+    loop = asyncio.get_event_loop()
+    context = caio.AsyncioContext(max_requests, loop=loop)
+    finalize(loop, lambda *_: context.close())
+    DEFAULT_CONTEXT_STORE[loop] = context
+    return context
+
+
+def get_default_context() -> caio.AsyncioContext:
+    loop = asyncio.get_event_loop()
+    context = DEFAULT_CONTEXT_STORE.get(loop)
+
+    if context is not None:
+        return context
+
+    return create_context()

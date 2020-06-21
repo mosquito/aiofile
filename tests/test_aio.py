@@ -222,28 +222,29 @@ async def test_truncate(aio_file_maker, temp_file):
     assert (await afp.read()) == ''
 
 
-async def test_modes(aio_file_maker, loop, tmpdir):
+async def test_modes(aio_file_maker, tmpdir):
     tmpfile = tmpdir.join('test.txt')
 
-    async with aio_file_maker(tmpfile, 'w', loop=loop) as afp:
+    async with aio_file_maker(tmpfile, 'w') as afp:
         await afp.write('foo')
+        await afp.fsync()
 
-    async with aio_file_maker(tmpfile, 'r', loop=loop) as afp:
+    async with aio_file_maker(tmpfile, 'r') as afp:
         assert await afp.read() == 'foo'
 
-    async with aio_file_maker(tmpfile, 'a+', loop=loop) as afp:
+    async with aio_file_maker(tmpfile, 'a+') as afp:
         assert await afp.read() == 'foo'
 
-    async with aio_file_maker(tmpfile, 'r+', loop=loop) as afp:
+    async with aio_file_maker(tmpfile, 'r+') as afp:
         assert await afp.read() == 'foo'
 
     data = dict((str(i), i)for i in range(1000))
 
     tmpfile = tmpdir.join('test.json')
-    async with aio_file_maker(tmpfile, 'w', loop=loop) as afp:
+    async with aio_file_maker(tmpfile, 'w') as afp:
         await afp.write(json.dumps(data, indent=1))
 
-    async with aio_file_maker(tmpfile, 'r', loop=loop) as afp:
+    async with aio_file_maker(tmpfile, 'r') as afp:
         result = json.loads(await afp.read())
 
     assert result == data

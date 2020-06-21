@@ -1,3 +1,5 @@
+from functools import partial
+
 import pytest
 
 from caio import python_aio_asyncio
@@ -16,16 +18,30 @@ except ImportError:
 from aiofile import AIOFile
 
 
+class DefaultContext:
+    __name__ = 'default'
+
+
 IMPLEMENTATIONS = list(filter(None, [
     linux_aio_asyncio,
     thread_aio_asyncio,
     python_aio_asyncio,
+    DefaultContext()
 ]))
 
+IMPLEMENTATION_NAMES = map(lambda x: x.__name__, IMPLEMENTATIONS)
 
-@pytest.fixture(scope="session", params=IMPLEMENTATIONS)
-def aio_file_maker(request):
-    class AIOFileCustom(AIOFile):
-        CONTEXT_IMPL = request.param.AsyncioContext
 
-    return AIOFileCustom
+@pytest.fixture(params=IMPLEMENTATIONS, ids=IMPLEMENTATION_NAMES)
+async def aio_context(request, loop):
+    if isinstance(request.param, DefaultContext):
+        yield None
+        return
+
+    async with request.param.AsyncioContext(loop=loop) as context:
+        yield context
+
+
+@pytest.fixture
+def aio_file_maker(aio_context):
+    return partial(AIOFile, context=aio_context)

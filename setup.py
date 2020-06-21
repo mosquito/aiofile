@@ -1,5 +1,4 @@
 from setuptools import setup, Extension
-from sys import platform
 from os import path
 
 from importlib.machinery import SourceFileLoader
@@ -24,7 +23,6 @@ setup(
     author=module.__author__,
     author_email=module.team_email,
     provides=["aiofile"],
-    build_requires=['cython'],
     keywords=["aio", "python", "asyncio", "cython", "fileio", "io"],
     classifiers=[
         'Development Status :: 5 - Production/Stable',

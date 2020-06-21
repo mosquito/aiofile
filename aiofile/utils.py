@@ -14,7 +14,7 @@ class Reader(AsyncIterable):
         self._chunk_size = int(chunk_size)
         self.__offset = int(offset)
         self.file = aio_file
-        self.__lock = asyncio.Lock(loop=self.file.loop)
+        self.__lock = asyncio.Lock()
 
     async def read_chunk(self):
         async with self.__lock:
@@ -46,7 +46,7 @@ class Writer:
     def __init__(self, aio_file: AIOFile, offset: int = 0):
         self.__offset = int(offset)
         self.__aio_file = aio_file
-        self.__lock = asyncio.Lock(loop=self.__aio_file.loop)
+        self.__lock = asyncio.Lock()
 
     async def __call__(self, data):
         async with self.__lock:
