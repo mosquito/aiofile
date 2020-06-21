@@ -2,17 +2,14 @@ import os
 import asyncio
 from collections import namedtuple
 from functools import partial
-from typing import Generator, Any, Union
+from typing import Any, Union, Optional, Coroutine
 from weakref import finalize
 
 import caio
-
+from caio.asyncio_base import AsyncioContextBase
 
 AIO_FILE_NOT_OPENED = -1
 AIO_FILE_CLOSED = -2
-
-
-ReadResultType = Generator[Any, None, Union[bytes, str]]
 
 
 FileMode = namedtuple('FileMode', (
@@ -26,7 +23,7 @@ FileMode = namedtuple('FileMode', (
 ))
 
 
-def parse_mode(mode: str):
+def parse_mode(mode: str) -> FileMode:
     """ Rewritten from `cpython fileno`_
 
     .. _cpython fileio: https://bit.ly/2JY2cnp
@@ -107,7 +104,7 @@ def parse_mode(mode: str):
 class AIOFile:
     def __init__(self, filename: str, mode: str = "r",
                  access_mode: int = 0o644, encoding: str = 'utf-8',
-                 context=None):
+                 context: Optional[AsyncioContextBase] = None):
 
         self.__context = context or get_default_context()
 
@@ -118,7 +115,9 @@ class AIOFile:
         self.__access_mode = access_mode
         self.__encoding = encoding
 
-    def _run_in_thread(self, func, *args, **kwargs) -> asyncio.Future:
+    def _run_in_thread(
+            self, func, *args, **kwargs
+    ) -> Coroutine[Any, Any, Any]:
         return self.__context.loop.run_in_executor(
             None, partial(func, *args, **kwargs)
         )
@@ -181,7 +180,7 @@ class AIOFile:
     def __aexit__(self, *args):
         return asyncio.get_event_loop().create_task(self.close())
 
-    async def read(self, size: int = -1, offset: int = 0) -> ReadResultType:
+    async def read(self, size: int = -1, offset: int = 0) -> Union[bytes, str]:
         if self.__fileno < 0:
             raise asyncio.InvalidStateError('AIOFile closed')
 
@@ -199,7 +198,7 @@ class AIOFile:
         data = await self.__context.read(size, self.__fileno, offset)
         return data if self.mode.binary else data.decode(self.__encoding)
 
-    async def write(self, data: (str, bytes), offset: int = 0):
+    async def write(self, data: Union[str, bytes], offset: int = 0):
         if self.__fileno < 0:
             raise asyncio.InvalidStateError('AIOFile closed')
 
@@ -219,7 +218,7 @@ class AIOFile:
             raise asyncio.InvalidStateError('AIOFile closed')
         return await self.__context.fdsync(self.__fileno)
 
-    def truncate(self, length: int = 0) -> asyncio.Future:
+    def truncate(self, length: int = 0):
         if self.__fileno < 0:
             raise asyncio.InvalidStateError('AIOFile closed')
 

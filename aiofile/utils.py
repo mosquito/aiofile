@@ -1,6 +1,7 @@
 import asyncio
 import io
 from collections.abc import AsyncIterable
+import typing
 
 from .aio import AIOFile
 
@@ -56,15 +57,17 @@ class Writer:
 
 class LineReader(AsyncIterable):
     def __init__(self, aio_file: AIOFile, offset: int = 0,
-                 chunk_size: int = 255, line_sep='\n'):
+                 chunk_size: int = 255, line_sep: str = '\n'):
 
         self.__reader = Reader(aio_file, chunk_size=chunk_size, offset=offset)
-        self._buffer = io.BytesIO() if aio_file.mode.binary else io.StringIO()
+        self._buffer = (
+            io.BytesIO() if aio_file.mode.binary else io.StringIO()
+        )   # type: typing.Any
         self.linesep = (
             line_sep.encode() if self.__reader.file.mode.binary else line_sep
         )
 
-    async def readline(self):
+    async def readline(self) -> typing.Union[str, bytes]:
         while True:
             chunk = await self.__reader.read_chunk()
 
@@ -85,7 +88,7 @@ class LineReader(AsyncIterable):
 
             return line
 
-    async def __anext__(self):
+    async def __anext__(self) -> typing.Union[bytes, str]:
         line = await self.readline()
 
         if not line:
@@ -93,5 +96,5 @@ class LineReader(AsyncIterable):
 
         return line
 
-    def __aiter__(self):
+    def __aiter__(self) -> "LineReader":
         return self
