@@ -17,8 +17,6 @@ except ImportError:
     linux_aio_asyncio = None
 
 
-
-
 class DefaultContext:
     __name__ = "default"
 
