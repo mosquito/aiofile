@@ -1,9 +1,9 @@
 AIOFile
 =======
 
-.. image:: https://cloud.drone.io/api/badges/mosquito/aio-pika/status.svg
-    :target: https://cloud.drone.io/mosquito/aiofile
-    :alt: Drone CI
+.. image::https://github.com/mosquito/aiofile/workflows/tox/badge.svg
+    :target: https://github.com/mosquito/aiofile/actions?query=branch%3Amaster
+    :alt: Github Actions
 
 .. image:: https://img.shields.io/pypi/v/aiofile.svg
     :target: https://pypi.python.org/pypi/aiofile/
