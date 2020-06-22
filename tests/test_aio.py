@@ -251,7 +251,6 @@ async def test_modes(aio_file_maker, tmpdir):
     assert result == data
 
 
-@aio_impl
 async def test_unicode_reader(aio_file_maker, temp_file):
     async with aio_file_maker(temp_file, 'w+') as afp:
         await afp.write('한글')
@@ -262,7 +261,6 @@ async def test_unicode_reader(aio_file_maker, temp_file):
         assert await reader.read_chunk() == '글'
 
 
-@aio_impl
 async def test_unicode_writer(aio_file_maker, temp_file):
     async with aio_file_maker(temp_file, 'w+') as afp:
         writer = Writer(afp)
