@@ -1,7 +1,7 @@
 AIOFile
 =======
 
-.. image::https://github.com/mosquito/aiofile/workflows/tox/badge.svg
+.. image:: https://github.com/mosquito/aiofile/workflows/tox/badge.svg
     :target: https://github.com/mosquito/aiofile/actions?query=branch%3Amaster
     :alt: Github Actions
 
