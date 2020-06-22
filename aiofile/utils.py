@@ -21,12 +21,23 @@ class Reader(AsyncIterable):
 
     async def read_chunk(self):
         async with self.__lock:
-            chunk = await self.file.read(
-                self._chunk_size,
-                self.__offset,
-            )
+            for retry in range(4):
+                try:
+                    chunk = await self.file.read(
+                        self._chunk_size + retry,
+                        self.__offset
+                    )
+                except UnicodeDecodeError:
+                    if retry == 3:
+                        raise
+                else:
+                    break
 
-            chunk_size = len(chunk)
+            if isinstance(chunk, str):
+                chunk_size = len(chunk.encode())
+            else:
+                chunk_size = len(chunk)
+
             self.__offset += chunk_size
 
             return chunk
@@ -54,7 +65,10 @@ class Writer:
     async def __call__(self, data):
         async with self.__lock:
             await self.__aio_file.write(data, self.__offset)
-            self.__offset += len(data)
+            if isinstance(data, str):
+                self.__offset += len(data.encode())
+            else:
+                self.__offset += len(data)
 
 
 class LineReader(AsyncIterable):
