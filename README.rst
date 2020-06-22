@@ -31,18 +31,25 @@ Development - Stable
 Features
 --------
 
-* AIOFile has no internal pointer. You should pass ``offset`` and ``chunk_size`` for each operation or use helpers (Reader or Writer).
-* For POSIX (MacOS X and Linux) using implementaion based on `aio.h`_ (with `Cython`_).
-* For non-POSIX systems using thread-based implementation
+* Since version 2.0.0 using `caio`_, is contain linux libaio and two
+  thread-based implementations (c-based and pure-python).
+* AIOFile has no internal pointer. You should pass ``offset`` and
+  ``chunk_size`` for each operation or use helpers (Reader or Writer).
+* For Linux using implementation based on `libaio`_.
+* For POSIX (MacOS X and optional Linux) using implementation
+  using on `threadpool`_.
+* Otherwise using pure-python thread-based implementation.
+* Implementation chooses automatically depending on system compatibility.
 
-.. _aio.h: https://github.com/torvalds/linux/blob/master/include/linux/aio.h
-.. _Cython: http://cython.org
+.. _caio: https://pypi.org/project/caio
+.. _libaio: https://pagure.io/libaio
+.. _threadpool: https://github.com/mbrossard/threadpool/
 
 
 Code examples
 -------------
 
-All code examples requires python 3.5+.
+All code examples requires python 3.6+.
 
 Write and Read
 ++++++++++++++
