@@ -1,31 +1,50 @@
+from functools import partial
+
 import pytest
-import asyncio
-from uuid import uuid4
-from tempfile import NamedTemporaryFile
+
+from aiofile import AIOFile
+from caio import python_aio_asyncio
 
 
-@pytest.fixture()
-def event_loop():
-    asyncio.get_event_loop().close()
+try:
+    from caio import thread_aio_asyncio
+except ImportError:
+    thread_aio_asyncio = None
 
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-
-    try:
-        yield loop
-    finally:
-        loop.close()
+try:
+    from caio import linux_aio_asyncio
+except ImportError:
+    linux_aio_asyncio = None
 
 
-@pytest.yield_fixture()
-def temp_file():
-    temp = NamedTemporaryFile()
-    try:
-        yield temp.name
-    finally:
-        temp.close()
+class DefaultContext:
+    __name__ = "default"
 
 
-@pytest.fixture()
-def uuid():
-    return str(uuid4())
+IMPLEMENTATIONS = list(
+    filter(
+        None, [
+            linux_aio_asyncio,
+            thread_aio_asyncio,
+            python_aio_asyncio,
+            DefaultContext(),
+        ],
+    ),
+)
+
+IMPLEMENTATION_NAMES = map(lambda x: x.__name__, IMPLEMENTATIONS)
+
+
+@pytest.fixture(params=IMPLEMENTATIONS, ids=IMPLEMENTATION_NAMES)
+async def aio_context(request, loop):
+    if isinstance(request.param, DefaultContext):
+        yield None
+        return
+
+    async with request.param.AsyncioContext(loop=loop) as context:
+        yield context
+
+
+@pytest.fixture
+def aio_file_maker(aio_context):
+    return partial(AIOFile, context=aio_context)

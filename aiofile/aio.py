@@ -1,44 +1,32 @@
-import os
 import asyncio
+import os
 from collections import namedtuple
 from functools import partial
-from typing import Generator, Any, Union
+from typing import Any, Coroutine, Optional, Union
+from weakref import finalize
 
-try:
-    from .posix_aio import IO_NOP, IO_WRITE, IO_READ, AIOOperation
-except ImportError:
-    from .thread_aio import (
-        IO_READ, IO_WRITE, IO_NOP, ThreadedAIOOperation as AIOOperation
-    )
+import caio
+from caio.asyncio_base import AsyncioContextBase
 
 
 AIO_FILE_NOT_OPENED = -1
 AIO_FILE_CLOSED = -2
 
 
-ReadResultType = Generator[Any, None, Union[bytes, str]]
+FileMode = namedtuple(
+    "FileMode", (
+        "readable",
+        "writable",
+        "plus",
+        "appending",
+        "created",
+        "flags",
+        "binary",
+    ),
+)
 
 
-def run_in_thread(func, *args, **kwargs) -> asyncio.Future:
-    loop = kwargs.pop('loop')       # type: asyncio.AbstractEventLoop
-    assert not loop.is_closed(), "Event loop is closed"
-    assert loop.is_running(), "Event loop is not running"
-
-    return loop.run_in_executor(None, partial(func, *args, **kwargs))
-
-
-FileMode = namedtuple('FileMode', (
-    'readable',
-    'writable',
-    'plus',
-    'appending',
-    'created',
-    'flags',
-    'binary',
-))
-
-
-def parse_mode(mode: str):
+def parse_mode(mode: str) -> FileMode:
     """ Rewritten from `cpython fileno`_
 
     .. _cpython fileio: https://bit.ly/2JY2cnp
@@ -55,45 +43,47 @@ def parse_mode(mode: str):
     binary = False
 
     for m in mode:
-        if m == 'x':
+        if m == "x":
             rwa = True
             created = True
             writable = True
             flags |= os.O_EXCL | os.O_CREAT
 
-        if m == 'r':
+        if m == "r":
             if rwa:
-                raise Exception('Bad mode')
+                raise Exception("Bad mode")
 
             rwa = True
             readable = True
 
-        if m == 'w':
+        if m == "w":
             if rwa:
-                raise Exception('Bad mode')
+                raise Exception("Bad mode")
 
             rwa = True
             writable = True
 
             flags |= os.O_CREAT | os.O_TRUNC
 
-        if m == 'a':
+        if m == "a":
             if rwa:
-                raise Exception('Bad mode')
+                raise Exception("Bad mode")
             rwa = True
             writable = True
             appending = True
             flags |= os.O_APPEND | os.O_CREAT
 
-        if m == '+':
+        if m == "+":
             if plus:
-                raise Exception('Bad mode')
+                raise Exception("Bad mode")
             readable = True
             writable = True
             plus = True
 
-        if m == 'b':
+        if m == "b":
             binary = True
+            if hasattr(os, "O_BINARY"):
+                flags |= os.O_BINARY
 
     if readable and writable:
         flags |= os.O_RDWR
@@ -115,24 +105,27 @@ def parse_mode(mode: str):
 
 
 class AIOFile:
-    __slots__ = (
-        '__fileno', '__fname', 'mode',
-        '__access_mode', '__loop', '__encoding',
-    )
+    def __init__(
+        self, filename: str, mode: str = "r",
+        access_mode: int = 0o644, encoding: str = "utf-8",
+        context: Optional[AsyncioContextBase] = None,
+    ):
 
-    OPERATION_CLASS = AIOOperation
-    IO_READ = IO_READ
-    IO_WRITE = IO_WRITE
-    IO_NOP = IO_NOP
+        self.__context = context or get_default_context()
 
-    def __init__(self, filename: str, mode: str="r", access_mode: int=0o644,
-                 loop=None, encoding: str='utf-8'):
         self.mode = parse_mode(mode)
-        self.__loop = loop or asyncio.get_event_loop()
+
         self.__fname = str(filename)
-        self.__access_mode = access_mode
         self.__fileno = AIO_FILE_NOT_OPENED
+        self.__access_mode = access_mode
         self.__encoding = encoding
+
+    def _run_in_thread(
+            self, func, *args, **kwargs
+    ) -> Coroutine[Any, Any, Any]:
+        return self.__context.loop.run_in_executor(
+            None, partial(func, *args, **kwargs),
+        )
 
     @property
     def name(self):
@@ -140,29 +133,28 @@ class AIOFile:
 
     @property
     def loop(self):
-        return self.__loop
+        return self.__context.loop
 
     async def open(self):
         if self.__fileno == AIO_FILE_CLOSED:
-            raise asyncio.InvalidStateError('AIOFile closed')
+            raise asyncio.InvalidStateError("AIOFile closed")
 
         if self.__fileno != AIO_FILE_NOT_OPENED:
             return
 
-        self.__fileno = await run_in_thread(
+        self.__fileno = await self._run_in_thread(
             os.open,
             self.__fname,
-            loop=self.__loop,
             flags=self.mode.flags,
-            mode=self.__access_mode
+            mode=self.__access_mode,
         )
 
     def open_fd(self, fd: int):
         if self.__fileno == AIO_FILE_CLOSED:
-            raise asyncio.InvalidStateError('AIOFile closed')
+            raise asyncio.InvalidStateError("AIOFile closed")
 
         if self.__fileno != AIO_FILE_NOT_OPENED:
-            raise RuntimeError('Already opened')
+            raise RuntimeError("Already opened")
 
         self.__fileno = fd
 
@@ -176,7 +168,7 @@ class AIOFile:
         if self.mode.writable:
             await self.fsync()
 
-        await run_in_thread(os.close, self.__fileno, loop=self.__loop)
+        await self._run_in_thread(os.close, self.__fileno)
         self.__fileno = AIO_FILE_CLOSED
 
     def fileno(self):
@@ -191,38 +183,29 @@ class AIOFile:
         return self
 
     def __aexit__(self, *args):
-        return self.__loop.create_task(self.close())
+        return asyncio.get_event_loop().create_task(self.close())
 
-    async def read(self, size: int=-1, offset: int=0) -> ReadResultType:
-
+    async def read(self, size: int = -1, offset: int = 0) -> Union[bytes, str]:
         if self.__fileno < 0:
-            raise asyncio.InvalidStateError('AIOFile closed')
+            raise asyncio.InvalidStateError("AIOFile closed")
 
         if size < -1:
             raise ValueError("Unsupported value %d for size" % size)
 
         if size == -1:
             size = (
-                await run_in_thread(
+                await self._run_in_thread(
                     os.stat,
                     self.__fileno,
-                    loop=self.loop
                 )
             ).st_size
 
-        data = await self.OPERATION_CLASS(
-            self.IO_READ,
-            self.__fileno,
-            offset,
-            size,
-            self.__loop
-        )
-
+        data = await self.__context.read(size, self.__fileno, offset)
         return data if self.mode.binary else data.decode(self.__encoding)
 
-    async def write(self, data: (str, bytes), offset: int=0):
+    async def write(self, data: Union[str, bytes], offset: int = 0):
         if self.__fileno < 0:
-            raise asyncio.InvalidStateError('AIOFile closed')
+            raise asyncio.InvalidStateError("AIOFile closed")
 
         if self.mode.binary:
             if not isinstance(data, bytes):
@@ -233,36 +216,42 @@ class AIOFile:
                 raise ValueError("Data must be str in text mode")
             bytes_data = data.encode(self.__encoding)
 
-        op = self.OPERATION_CLASS(
-            self.IO_WRITE,
-            self.__fileno,
-            offset,
-            len(bytes_data),
-            self.__loop
-        )
-
-        op.buffer = bytes_data
-        return (await op)
+        return await self.__context.write(bytes_data, self.__fileno, offset)
 
     async def fsync(self):
         if self.__fileno < 0:
-            raise asyncio.InvalidStateError('AIOFile closed')
+            raise asyncio.InvalidStateError("AIOFile closed")
+        return await self.__context.fdsync(self.__fileno)
 
-        return (
-            await self.OPERATION_CLASS(
-                self.IO_NOP,
-                self.__fileno, 0, 0,
-                self.__loop
-            )
-        )
-
-    def truncate(self, length: int=0) -> asyncio.Future:
+    def truncate(self, length: int = 0):
         if self.__fileno < 0:
-            raise asyncio.InvalidStateError('AIOFile closed')
+            raise asyncio.InvalidStateError("AIOFile closed")
 
-        return run_in_thread(
+        return self._run_in_thread(
             os.ftruncate,
             self.__fileno,
             length,
-            loop=self.__loop
         )
+
+
+DEFAULT_CONTEXT_STORE = {}
+
+
+def create_context(
+        max_requests=caio.AsyncioContext.MAX_REQUESTS_DEFAULT,
+) -> caio.AsyncioContext:
+    loop = asyncio.get_event_loop()
+    context = caio.AsyncioContext(max_requests, loop=loop)
+    finalize(loop, lambda *_: context.close())
+    DEFAULT_CONTEXT_STORE[loop] = context
+    return context
+
+
+def get_default_context() -> caio.AsyncioContext:
+    loop = asyncio.get_event_loop()
+    context = DEFAULT_CONTEXT_STORE.get(loop)
+
+    if context is not None:
+        return context
+
+    return create_context()
