@@ -9,37 +9,41 @@ from .aio import AIOFile
 class Reader(AsyncIterable):
     __slots__ = "_chunk_size", "__offset", "file", "__lock"
 
-    def __init__(
-        self, aio_file: AIOFile,
-        offset: int = 0, chunk_size: int = 32 * 1024,
-    ):
+    CHUNK_SIZE = 32 * 1024
+
+    def __init__(self, aio_file: AIOFile, offset: int = 0,
+                 chunk_size: int = CHUNK_SIZE):
+
+        self.__lock = asyncio.Lock()
+        self.__offset = int(offset)
 
         self._chunk_size = int(chunk_size)
-        self.__offset = int(offset)
         self.file = aio_file
-        self.__lock = asyncio.Lock()
 
     async def read_chunk(self):
         async with self.__lock:
-            for retry in range(4):
-                try:
-                    chunk = await self.file.read(
-                        self._chunk_size + retry,
-                        self.__offset
-                    )
-                except UnicodeDecodeError:
-                    if retry == 3:
-                        raise
-                else:
-                    break
-
-            if isinstance(chunk, str):
-                chunk_size = len(chunk.encode())
-            else:
+            if self.file.mode.binary:
+                chunk = await self.file.read_bytes(
+                    self._chunk_size, self.__offset
+                )
                 chunk_size = len(chunk)
+            else:
+                last_error = None
+                for retry in range(4):
+                    chunk_bytes = await self.file.read_bytes(
+                        self._chunk_size + retry, self.__offset
+                    )
+                    try:
+                        chunk = self.file.decode_bytes(chunk_bytes)
+                        break
+                    except UnicodeDecodeError as e:
+                        last_error = e
+                else:
+                    raise last_error
+
+                chunk_size = len(chunk_bytes)
 
             self.__offset += chunk_size
-
             return chunk
 
     async def __anext__(self):
@@ -64,25 +68,30 @@ class Writer:
 
     async def __call__(self, data):
         async with self.__lock:
-            await self.__aio_file.write(data, self.__offset)
             if isinstance(data, str):
-                self.__offset += len(data.encode())
-            else:
-                self.__offset += len(data)
+                data = self.__aio_file.encode_bytes(data)
+
+            await self.__aio_file.write_bytes(data, self.__offset)
+            self.__offset += len(data)
 
 
 class LineReader(AsyncIterable):
+    CHUNK_SIZE = 4192
+
     def __init__(
         self, aio_file: AIOFile, offset: int = 0,
-        chunk_size: int = 255, line_sep: str = "\n",
+        chunk_size: int = CHUNK_SIZE, line_sep: str = "\n",
     ):
-
         self.__reader = Reader(aio_file, chunk_size=chunk_size, offset=offset)
+
         self._buffer = (
             io.BytesIO() if aio_file.mode.binary else io.StringIO()
         )   # type: typing.Any
+
         self.linesep = (
-            line_sep.encode() if self.__reader.file.mode.binary else line_sep
+            aio_file.encode_bytes(line_sep)
+            if aio_file.mode.binary
+            else line_sep
         )
 
     async def readline(self) -> typing.Union[str, bytes]:
