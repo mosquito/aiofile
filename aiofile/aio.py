@@ -106,18 +106,18 @@ def parse_mode(mode: str) -> FileMode:
 
 class AIOFile:
     def __init__(
-        self, filename: str, mode: str = "r",
-        access_mode: int = 0o644, encoding: str = "utf-8",
+        self, filename: str, mode: str = "r",  encoding: str = "utf-8",
         context: Optional[AsyncioContextBase] = None,
     ):
 
         self.__context = context or get_default_context()
 
+        self.__fname = str(filename)
+        self.__open_mode = mode
+
         self.mode = parse_mode(mode)
 
-        self.__fname = str(filename)
-        self.__fileno = AIO_FILE_NOT_OPENED
-        self.__access_mode = access_mode
+        self.__file_obj = None
         self.__encoding = encoding
 
     def _run_in_thread(
@@ -135,44 +135,39 @@ class AIOFile:
     def loop(self):
         return self.__context.loop
 
-    async def open(self):
-        if self.__fileno == AIO_FILE_CLOSED:
-            raise asyncio.InvalidStateError("AIOFile closed")
+    @property
+    def encoding(self):
+        return self.__encoding
 
-        if self.__fileno != AIO_FILE_NOT_OPENED:
+    async def open(self):
+        if self.__file_obj is not None:
             return
 
-        self.__fileno = await self._run_in_thread(
-            os.open,
-            self.__fname,
-            flags=self.mode.flags,
-            mode=self.__access_mode,
-        )
-
-    def open_fd(self, fd: int):
-        if self.__fileno == AIO_FILE_CLOSED:
+        if self.__file_obj and self.__file_obj.closed:
             raise asyncio.InvalidStateError("AIOFile closed")
 
-        if self.__fileno != AIO_FILE_NOT_OPENED:
-            raise RuntimeError("Already opened")
+        self.__file_obj = await self._run_in_thread(
+            open, self.__fname, self.__open_mode,
+        )
 
-        self.__fileno = fd
+        return self.fileno()
 
     def __repr__(self):
         return "<AIOFile: %r>" % self.__fname
 
     async def close(self):
-        if self.__fileno < 0:
+        if self.__file_obj is None:
             return
 
         if self.mode.writable:
             await self.fsync()
 
-        await self._run_in_thread(os.close, self.__fileno)
-        self.__fileno = AIO_FILE_CLOSED
+        await self._run_in_thread(self.__file_obj.close)
 
-    def fileno(self):
-        return self.__fileno
+    def fileno(self) -> int:
+        if self.__file_obj is None:
+            raise asyncio.InvalidStateError("AIOFile closed")
+        return self.__file_obj.fileno()
 
     def __await__(self):
         yield from self.open().__await__()
@@ -186,9 +181,10 @@ class AIOFile:
         return asyncio.get_event_loop().create_task(self.close())
 
     async def read(self, size: int = -1, offset: int = 0) -> Union[bytes, str]:
-        if self.__fileno < 0:
-            raise asyncio.InvalidStateError("AIOFile closed")
+        data = await self.read_bytes(size, offset)
+        return data if self.mode.binary else self.decode_bytes(data)
 
+    async def read_bytes(self, size: int = -1, offset: int = 0) -> bytes:
         if size < -1:
             raise ValueError("Unsupported value %d for size" % size)
 
@@ -196,17 +192,13 @@ class AIOFile:
             size = (
                 await self._run_in_thread(
                     os.stat,
-                    self.__fileno,
+                    self.fileno(),
                 )
             ).st_size
 
-        data = await self.__context.read(size, self.__fileno, offset)
-        return data if self.mode.binary else data.decode(self.__encoding)
+        return await self.__context.read(size, self.fileno(), offset)
 
     async def write(self, data: Union[str, bytes], offset: int = 0):
-        if self.__fileno < 0:
-            raise asyncio.InvalidStateError("AIOFile closed")
-
         if self.mode.binary:
             if not isinstance(data, bytes):
                 raise ValueError("Data must be bytes in binary mode")
@@ -214,23 +206,25 @@ class AIOFile:
         else:
             if not isinstance(data, str):
                 raise ValueError("Data must be str in text mode")
-            bytes_data = data.encode(self.__encoding)
+            bytes_data = self.encode_bytes(data)
 
-        return await self.__context.write(bytes_data, self.__fileno, offset)
+        return await self.write_bytes(bytes_data, offset)
+
+    def encode_bytes(self, data: str) -> bytes:
+        return data.encode(self.__encoding)
+
+    def decode_bytes(self, data: bytes) -> str:
+        return data.decode(self.__encoding)
+
+    async def write_bytes(self, data: bytes, offset: int = 0):
+        return await self.__context.write(data, self.fileno(), offset)
 
     async def fsync(self):
-        if self.__fileno < 0:
-            raise asyncio.InvalidStateError("AIOFile closed")
-        return await self.__context.fdsync(self.__fileno)
+        return await self.__context.fdsync(self.fileno())
 
     def truncate(self, length: int = 0):
-        if self.__fileno < 0:
-            raise asyncio.InvalidStateError("AIOFile closed")
-
         return self._run_in_thread(
-            os.ftruncate,
-            self.__fileno,
-            length,
+            os.ftruncate, self.fileno(), length,
         )
 
 

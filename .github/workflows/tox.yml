@@ -56,3 +56,37 @@ jobs:
           COVERALLS_REPO_TOKEN: ${{ secrets.COVERALLS_REPO_TOKEN }}
         with:
           args: tox
+
+  tests-windows:
+    strategy:
+      fail-fast: false
+
+      matrix:
+        python-versions:
+          - 3.6
+          - 3.7
+          - 3.8
+
+    needs: lint
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Setting up python ${{ matrix.python-versions }}
+        uses: actions/setup-python@v2
+        with:
+          python-version: ${{ matrix.python-versions }}
+          architecture: x64
+
+      - name: Creating a virtualenv python ${{ matrix.python-versions }}
+        run: python -m venv .env
+        shell: cmd
+
+      - name: Installing project
+        run: .env\Scripts\pip.exe install -Ue ".[develop]"
+        shell: cmd
+
+      - name: Running tests
+        run: .env\Scripts\pytest.exe -v tests
+        shell: cmd
