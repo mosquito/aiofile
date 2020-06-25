@@ -106,18 +106,18 @@ def parse_mode(mode: str) -> FileMode:
 
 class AIOFile:
     def __init__(
-        self, filename: str, mode: str = "r",
-        access_mode: int = 0o644, encoding: str = "utf-8",
+        self, filename: str, mode: str = "r",  encoding: str = "utf-8",
         context: Optional[AsyncioContextBase] = None,
     ):
 
         self.__context = context or get_default_context()
 
+        self.__fname = str(filename)
+        self.__open_mode = mode
+
         self.mode = parse_mode(mode)
 
-        self.__fname = str(filename)
-        self.__fileno = AIO_FILE_NOT_OPENED
-        self.__access_mode = access_mode
+        self.__file_obj = None
         self.__encoding = encoding
 
     def _run_in_thread(
@@ -139,39 +139,35 @@ class AIOFile:
     def encoding(self):
         return self.__encoding
 
-    async def open(self) -> int:
-        if self.__fileno == AIO_FILE_CLOSED:
+    async def open(self):
+        if self.__file_obj is not None:
+            return
+
+        if self.__file_obj and self.__file_obj.closed:
             raise asyncio.InvalidStateError("AIOFile closed")
 
-        if self.__fileno != AIO_FILE_NOT_OPENED:
-            return self.__fileno
-
-        self.__fileno = await self._run_in_thread(
-            os.open,
-            self.__fname,
-            flags=self.mode.flags,
-            mode=self.__access_mode,
+        self.__file_obj = await self._run_in_thread(
+            open, self.__fname, self.__open_mode,
         )
-        return self.__fileno
+
+        return self.fileno()
 
     def __repr__(self):
         return "<AIOFile: %r>" % self.__fname
 
     async def close(self):
-        if self.__fileno < 0:
+        if self.__file_obj is None:
             return
 
         if self.mode.writable:
             await self.fsync()
 
-        await self._run_in_thread(os.close, self.__fileno)
-        self.__fileno = AIO_FILE_CLOSED
+        await self._run_in_thread(self.__file_obj.close)
 
     def fileno(self) -> int:
-        if self.__fileno < 0:
+        if self.__file_obj is None:
             raise asyncio.InvalidStateError("AIOFile closed")
-
-        return self.__fileno
+        return self.__file_obj.fileno()
 
     def __await__(self):
         yield from self.open().__await__()
