@@ -15,7 +15,7 @@ from multiprocessing.pool import ThreadPool
 
 
 log = logging.getLogger(__name__)
-DATA_PATH = Path("data")
+DATA_PATH = Path(os.getenv("DATA_PATH", "data"))
 
 
 def gen_data(nfiles, pool_size=32, chunk_size=64 * 1024, chunks=1024):
