@@ -138,3 +138,4 @@ fabric.properties
 __pycache__
 
 *.c
+*.bin
