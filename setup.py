@@ -56,5 +56,5 @@ setup(
         ],
         ':python_version < "3.5"': "typing >= 3.5.3",
     },
-    install_requires=["caio~=0.5.3"],
+    install_requires=["caio~=0.6.0"],
 )
