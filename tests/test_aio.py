@@ -7,8 +7,11 @@ from io import BytesIO
 from random import shuffle
 from uuid import uuid4
 
+import asynctest
+import caio
 import pytest
 
+from aiofile import AIOFile
 from aiofile.utils import LineReader, Reader, Writer
 
 from .impl import split_by
@@ -279,3 +282,77 @@ async def test_unicode_writer(aio_file_maker, temp_file):
         reader = Reader(afp, chunk_size=1)
         assert await reader.read_chunk() == '한'
         assert await reader.read_chunk() == '글'
+
+
+@pytest.mark.parametrize(('mode', 'data'), [('w+', ''), ('wb+', b'')])
+async def test_write_read_nothing(aio_file_maker, temp_file, mode, data):
+    async with aio_file_maker(temp_file, mode) as afp:
+        assert await afp.write(data) == 0
+        assert await afp.read() == data
+
+
+async def test_partial_writes(temp_file, loop):
+    ctx = asynctest.Mock(caio.AbstractContext)
+    ctx.loop = loop
+    ctx.fdsync = asynctest.CoroutineMock(return_value=None)
+    ctx.write = asynctest.CoroutineMock(side_effect=asyncio.InvalidStateError)
+
+    async with AIOFile(temp_file, 'w', context=ctx) as afp:
+        # 1
+        return_iter = iter((3, 4))
+        ctx.write.side_effect = lambda *_, **__: next(return_iter)
+        await afp.write('aiofile', offset=0)
+        # 2
+        return_iter = iter((12, 1, 6))
+        ctx.write.side_effect = lambda *_, **__: next(return_iter)
+        await afp.write('test_partial_writes', offset=8)
+
+        assert ctx.write.await_args_list == [
+            # 1
+            asynctest.call(b'aiofile', afp.fileno(), 0),
+            asynctest.call(b'file', afp.fileno(), 3),
+            # 2
+            asynctest.call(b'test_partial_writes', afp.fileno(), 8),
+            asynctest.call(b'_writes', afp.fileno(), 20),
+            asynctest.call(b'writes', afp.fileno(), 21)
+        ]
+
+
+async def test_write_returned_negative(temp_file, loop):
+    ctx = asynctest.Mock(caio.AbstractContext)
+    ctx.loop = loop
+    ctx.fdsync = asynctest.CoroutineMock(return_value=None)
+    ctx.write = asynctest.CoroutineMock(side_effect=asyncio.InvalidStateError)
+
+    async with AIOFile(temp_file, 'w', context=ctx) as afp:
+        return_iter = iter((3, -27))
+        ctx.write.side_effect = lambda *_, **__: next(return_iter)
+        with pytest.raises(OSError) as raises:
+            await afp.write('aiofile')
+        assert raises.value.errno == 27
+        assert raises.value.filename == temp_file
+
+        ctx.write.reset_mock(side_effect=True)
+        ctx.write.return_value = -122
+        with pytest.raises(OSError) as raises:
+            await afp.write('aiofile')
+        assert raises.value.errno == 122
+        assert raises.value.filename == temp_file
+
+
+async def test_write_returned_zero(temp_file, loop):
+    ctx = asynctest.Mock(caio.AbstractContext)
+    ctx.loop = loop
+    ctx.fdsync = asynctest.CoroutineMock(return_value=None)
+    ctx.write = asynctest.CoroutineMock(side_effect=asyncio.InvalidStateError)
+
+    async with AIOFile(temp_file, 'w', context=ctx) as afp:
+        return_iter = iter((3, 0))
+        ctx.write.side_effect = lambda *_, **__: next(return_iter)
+        with pytest.raises(RuntimeError, match='Write operation returned 0'):
+            await afp.write('aiofile')
+
+        ctx.write.reset_mock(side_effect=True)
+        ctx.write.return_value = 0
+        with pytest.raises(RuntimeError, match='Write operation returned 0'):
+            await afp.write('aiofile')
