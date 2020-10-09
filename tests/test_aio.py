@@ -4,6 +4,7 @@ import json
 import os
 from base64 import b64encode
 from io import BytesIO
+from pathlib import Path
 from random import shuffle
 from uuid import uuid4
 
@@ -42,6 +43,18 @@ async def test_read(aio_file_maker, temp_file, uuid):
 async def test_read_write(aio_file_maker, temp_file, uuid):
     r_file = await aio_file_maker(temp_file, "r")
     w_file = await aio_file_maker(temp_file, "w")
+
+    await w_file.write(uuid)
+    await w_file.fsync()
+
+    data = await r_file.read()
+
+    assert data == uuid
+
+
+async def test_read_write_pathlib(aio_file_maker, temp_file, uuid):
+    r_file = await aio_file_maker(Path(temp_file), "r")
+    w_file = await aio_file_maker(Path(temp_file), "w")
 
     await w_file.write(uuid)
     await w_file.fsync()

@@ -2,6 +2,7 @@ import asyncio
 import os
 from collections import namedtuple
 from functools import partial
+from pathlib import Path
 from typing import Any, Coroutine, Optional, Union
 from weakref import finalize
 
@@ -106,7 +107,8 @@ def parse_mode(mode: str) -> FileMode:
 
 class AIOFile:
     def __init__(
-        self, filename: str, mode: str = "r",  encoding: str = "utf-8",
+        self, filename: Union[str, Path],
+        mode: str = "r", encoding: str = "utf-8",
         context: Optional[AsyncioContextBase] = None,
     ):
 
