@@ -2,6 +2,7 @@ import asyncio
 import os
 from collections import namedtuple
 from functools import partial
+from os import strerror
 from typing import Any, Coroutine, Optional, Union
 from weakref import finalize
 
@@ -217,7 +218,42 @@ class AIOFile:
         return data.decode(self.__encoding)
 
     async def write_bytes(self, data: bytes, offset: int = 0):
-        return await self.__context.write(data, self.fileno(), offset)
+        data_size = len(data)
+        if data_size == 0:
+            return 0
+
+        # data can be written partially, see write(2)
+        # (https://www.man7.org/linux/man-pages/man2/write.2.html)
+        # for example, it can happen when a disk quota or a resource limit
+        # is exceeded (in that case subsequent call will return a
+        # corresponding error) or write has been interrupted by
+        # an incoming signal
+
+        # behaviour here in regards to continue trying to write remaining data
+        # corresponds to the behaviour of io.BufferedIOBase
+        # (https://docs.python.org/3/library/io.html#io.BufferedIOBase.write)
+        # which used by object returned open() with `buffering` argument >= 1
+        # (effectively the default)
+
+        written = 0
+        while written < data_size:
+            res = await self.__context.write(
+                data[written:], self.fileno(), offset + written
+            )
+            if res == 0:
+                raise RuntimeError(
+                    'Write operation returned 0', self, offset, written
+                )
+            elif res < 0:
+                # fix for linux_aio implementation bug in caio<=0.6.1
+                # (https://github.com/mosquito/caio/pull/7)
+                # and safeguard from future similar issues
+                errno = -res
+                raise OSError(errno, strerror(errno), self.__fname)
+
+            written += res
+
+        return written
 
     async def fsync(self):
         return await self.__context.fdsync(self.fileno())
