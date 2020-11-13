@@ -82,11 +82,6 @@ The ``async_open`` helper creates file like object with file-like methods:
     loop = asyncio.get_event_loop()
     loop.run_until_complete(main())
 
-
-Suboptimal for small lines because doesn't reuse read buffer.
-When you want to read file by lines please avoid to use ``async_open``
-use ``LineReader`` instead.
-
 Supported methods:
 
 * ``async def read(length = -1)`` - reading chunk from file, when length is
@@ -96,6 +91,9 @@ Supported methods:
 * ``def tell()`` - returns current file pointer position
 * ``async def readline(size=-1, newline="\n")`` - read chunks until
   newline or EOF.
+  Suboptimal for small lines because doesn't reuse read buffer.
+  When you want to read file by lines please avoid to use ``async_open``
+  use ``LineReader`` instead.
 
 
 ``Reader`` and ``Writer``
