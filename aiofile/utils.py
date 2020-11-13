@@ -2,6 +2,7 @@ import asyncio
 import io
 import os
 import typing
+from abc import ABC, abstractmethod
 from collections.abc import AsyncIterable
 from pathlib import Path
 from types import MappingProxyType
@@ -21,11 +22,15 @@ async def unicode_reader(
     afp: AIOFile, chunk_size: int, offset: int, encoding: str = "utf-8"
 ) -> typing.Tuple[int, str]:
 
+    if chunk_size < 0:
+        chunk_bytes = await afp.read_bytes(-1, offset)
+        return len(chunk_bytes), chunk_bytes.decode(encoding=encoding)
+
     last_error = None
     for retry in range(ENCODING_MAP.get(encoding, 4)):
         chunk_bytes = await afp.read_bytes(chunk_size + retry, offset)
         try:
-            chunk = chunk_bytes.decode()
+            chunk = chunk_bytes.decode(encoding=encoding)
             break
         except UnicodeDecodeError as e:
             last_error = e
@@ -150,7 +155,9 @@ class LineReader(AsyncIterable):
         return self
 
 
-class FileIOWrapperBase:
+class FileIOWrapperBase(ABC):
+    _READLINE_CHUNK_SIZE = 4192
+
     def __init__(self, afp: AIOFile, *, offset: int = 0):
         self._offset = offset
         self._lock = asyncio.Lock()
@@ -175,6 +182,18 @@ class FileIOWrapperBase:
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         await self.close()
 
+    @abstractmethod
+    async def read(self, length: int = -1) -> typing.Any:
+        raise NotImplementedError
+
+    @abstractmethod
+    async def write(self, data: typing.Any) -> int:
+        raise NotImplementedError
+
+    @abstractmethod
+    async def readline(self, size: int, newline: typing.Any) -> typing.Any:
+        raise NotImplementedError
+
 
 class BinaryFileWrapper(FileIOWrapperBase):
     def __init__(self, afp: AIOFile):
@@ -182,11 +201,14 @@ class BinaryFileWrapper(FileIOWrapperBase):
             raise ValueError("Expected file in binary mode")
         super().__init__(afp)
 
+    async def __read(self, length: int) -> bytes:
+        data = await self.file.read_bytes(length, self._offset)
+        self._offset += len(data)
+        return data
+
     async def read(self, length: int = -1) -> bytes:
         async with self._lock:
-            data = await self.file.read_bytes(length, self._offset)
-            self._offset += len(data)
-        return data
+            return await self.__read(length)
 
     async def write(self, data: bytes) -> int:
         async with self._lock:
@@ -194,6 +216,30 @@ class BinaryFileWrapper(FileIOWrapperBase):
             self._offset += len(data)
         await operation
         return len(data)
+
+    async def readline(self, size: int = -1, newline: bytes = b"\n") -> bytes:
+        async with self._lock:
+            offset = self._offset
+            with io.BytesIO() as fp:
+                while True:
+                    chunk = await self.__read(self._READLINE_CHUNK_SIZE)
+
+                    if chunk:
+                        if newline not in chunk:  # type: ignore
+                            fp.write(chunk)
+                            continue
+
+                        fp.write(chunk)
+
+                    if 0 < size <= fp.tell():
+                        fp.seek(size)
+                        fp.truncate(size)
+                        return fp.getvalue()
+
+                    fp.seek(0)
+                    line = fp.readline()
+                    self._offset = offset + fp.tell()
+                    return line
 
 
 class TextFileWrapper(FileIOWrapperBase):
@@ -203,13 +249,31 @@ class TextFileWrapper(FileIOWrapperBase):
         super().__init__(afp)
         self.encoding = self.file.encoding
 
+    async def __read(self, length: int) -> str:
+        chunk_size = 0
+        offset = self._offset
+        chunk = ""
+        while length < 0 or length > len(chunk):
+            part_offset, part = await unicode_reader(
+                self.file, length, offset, self.encoding,
+            )
+
+            if not part:
+                break
+
+            chunk += part
+            offset += part_offset
+
+        if chunk_size > length > 0:
+            chunk = chunk[:length]
+            offset = length
+
+        self._offset = offset
+        return chunk
+
     async def read(self, length: int = -1) -> str:
         async with self._lock:
-            chunk_size, chunk = await unicode_reader(
-                self.file, length, self._offset, self.encoding,
-            )
-            self._offset += chunk_size
-        return chunk
+            return await self.__read(length)
 
     async def write(self, data: str) -> int:
         async with self._lock:
@@ -219,6 +283,30 @@ class TextFileWrapper(FileIOWrapperBase):
 
         await operation
         return len(data_bytes)
+
+    async def readline(self, size: int = -1, newline: str = "\n") -> str:
+        async with self._lock:
+            offset = self._offset
+            with io.StringIO() as fp:
+                while True:
+                    chunk = await self.__read(self._READLINE_CHUNK_SIZE)
+
+                    if chunk:
+                        if newline not in chunk:  # type: ignore
+                            fp.write(chunk)
+                            continue
+
+                        fp.write(chunk)
+
+                    if 0 < size <= fp.tell():
+                        fp.seek(size)
+                        fp.truncate(size)
+                        return fp.getvalue()
+
+                    fp.seek(0)
+                    line = fp.readline()
+                    self._offset = offset + fp.tell()
+                    return line
 
 
 def async_open(

@@ -375,13 +375,13 @@ async def test_write_returned_zero(temp_file, loop):
 
 async def test_text_io_wrapper(aio_file_maker, temp_file):
     async with aio_file_maker(temp_file, 'w+') as afp:
-        data = '💾💀☏⎃♞🏁'
-        await afp.write(data * 32)
+        data = '💾💀'
+        await afp.write(data * 5)
 
     with open(temp_file, "a+", encoding='utf-8') as fp:
         assert not fp.read(1)
         fp.seek(0)
-        assert fp.read() == data * 32
+        assert fp.read() == data * 5
 
         fp.seek(0)
         assert fp.read(1) == '💾'
@@ -390,7 +390,8 @@ async def test_text_io_wrapper(aio_file_maker, temp_file):
     async with TextFileWrapper(aio_file_maker(temp_file, 'a+')) as fp:
         assert not await fp.read(1)
         fp.seek(0)
-        assert await fp.read() == data * 32
+        chunk = await fp.read()
+        assert chunk == data * 5
 
         fp.seek(0)
         assert await fp.read(1) == '💾'
@@ -423,7 +424,7 @@ async def test_binary_io_wrapper(aio_file_maker, temp_file):
 
 async def test_async_open(aio_file_maker, temp_file):
     async with aio_file_maker(temp_file, 'wb+') as afp:
-        data = b'\x01\x02\x03' + "🏴‍☠️".encode()
+        data = b'\x01\x02\x03' + "🦠📱".encode()
         await afp.write(data * 32)
 
     assert isinstance(async_open(temp_file, "ab+"), BinaryFileWrapper)
@@ -431,11 +432,63 @@ async def test_async_open(aio_file_maker, temp_file):
     async with async_open(temp_file, 'ab+') as fp:
         assert not await fp.read(1)
         fp.seek(3)
-        assert await fp.read(13) == "🏴‍☠️".encode()
+        assert await fp.read(8) == "🦠📱".encode()
 
     assert isinstance(async_open(temp_file, "a+"), TextFileWrapper)
 
     async with async_open(temp_file, 'a+') as fp:
         assert not await fp.read(1)
         fp.seek(3)
-        assert await fp.read(13) == "🏴‍☠️"
+        assert await fp.read(2) == "🦠📱"
+
+
+async def test_async_open_unicode(aio_file_maker, temp_file):
+    async with aio_file_maker(temp_file, 'w+') as afp:
+        data = "🏁💾🏴‍☠️"
+        await afp.write(data)
+
+    async with async_open(temp_file, 'a+') as afp:
+        with open(temp_file, 'a+', encoding='utf-8') as fp:
+            assert not await afp.read(1)
+            assert not fp.read(1)
+
+            afp.seek(0)
+            fp.seek(0)
+
+            assert await afp.read(1) == fp.read(1)
+            assert await afp.read(1) == fp.read(1)
+            assert await afp.read(1) == fp.read(1)
+            assert await afp.read(1) == fp.read(1)
+
+            afp.seek(0)
+            fp.seek(0)
+
+            assert await afp.read(3) == fp.read(3)
+            assert afp.tell() == fp.tell()
+
+
+async def test_async_open_readline(aio_file_maker, temp_file):
+    async with aio_file_maker(temp_file, 'w+') as afp:
+        data = "Hello\nworld\n" + ("h" * 10000)
+        await afp.write(data)
+
+    async with async_open(temp_file, 'a+') as afp:
+        with open(temp_file, 'a+', encoding='utf-8') as fp:
+            afp.seek(0)
+            fp.seek(0)
+
+            assert await afp.readline() == fp.readline()
+            assert await afp.readline() == fp.readline()
+            assert await afp.readline() == fp.readline()
+
+    async with async_open(temp_file, 'ab+') as afp:
+        with open(temp_file, 'ab+') as fp:
+            assert not await afp.read(1)
+            assert not fp.read(1)
+
+            afp.seek(0)
+            fp.seek(0)
+
+            assert await afp.readline() == fp.readline()
+            assert await afp.readline() == fp.readline()
+            assert await afp.readline() == fp.readline()
