@@ -73,10 +73,17 @@ The ``async_open`` helper creates file like object with file-like methods:
 
             print(await afp.read())
 
+            await afp.write("Hello from\nasync world")
+            print(await afp.readline())
+            print(await afp.readline())
 
     loop = asyncio.get_event_loop()
     loop.run_until_complete(main())
 
+
+Suboptimal for small lines because doesn't reuse read buffer.
+When you want to read file by lines please avoid to use ``async_open``
+use ``LineReader`` instead.
 
 Supported methods:
 
@@ -85,6 +92,8 @@ Supported methods:
 * ``async def write(data)`` - write chunk to file
 * ``def seek(offset)`` - set file pointer position
 * ``def tell()`` - returns current file pointer position
+* ``async def readline(size=-1, newline="\n")`` - read chunks until
+  newline or EOF.
 
 
 ``Reader`` and ``Writer``

@@ -439,3 +439,55 @@ async def test_async_open(aio_file_maker, temp_file):
         assert not await fp.read(1)
         fp.seek(3)
         assert await fp.read(13) == "🏴‍☠️"
+
+
+async def test_async_open_unicode(aio_file_maker, temp_file):
+    async with aio_file_maker(temp_file, 'w+') as afp:
+        data = "🏁💾💩🦠"
+        await afp.write(data)
+
+    async with async_open(temp_file, 'a+') as afp:
+        with open(temp_file, 'a+', encoding='utf-8') as fp:
+            assert not await afp.read(1)
+            assert not fp.read(1)
+
+            afp.seek(0)
+            fp.seek(0)
+
+            assert await afp.read(1) == fp.read(1)
+            assert await afp.read(1) == fp.read(1)
+            assert await afp.read(1) == fp.read(1)
+            assert await afp.read(1) == fp.read(1)
+
+            afp.seek(0)
+            fp.seek(0)
+
+            assert await afp.read(3) == fp.read(3)
+            assert afp.tell() == fp.tell()
+
+
+async def test_async_open_readline(aio_file_maker, temp_file):
+    async with aio_file_maker(temp_file, 'w+') as afp:
+        data = "Hello\nworld\n" + ("h" * 10000)
+        await afp.write(data)
+
+    async with async_open(temp_file, 'a+') as afp:
+        with open(temp_file, 'a+', encoding='utf-8') as fp:
+            afp.seek(0)
+            fp.seek(0)
+
+            assert await afp.readline() == fp.readline()
+            assert await afp.readline() == fp.readline()
+            assert await afp.readline() == fp.readline()
+
+    async with async_open(temp_file, 'ab+') as afp:
+        with open(temp_file, 'ab+') as fp:
+            assert not await afp.read(1)
+            assert not fp.read(1)
+
+            afp.seek(0)
+            fp.seek(0)
+
+            assert await afp.readline() == fp.readline()
+            assert await afp.readline() == fp.readline()
+            assert await afp.readline() == fp.readline()
