@@ -240,11 +240,11 @@ class AIOFile:
         written = 0
         while written < data_size:
             res = await self.__context.write(
-                data[written:], self.fileno(), offset + written
+                data[written:], self.fileno(), offset + written,
             )
             if res == 0:
                 raise RuntimeError(
-                    'Write operation returned 0', self, offset, written
+                    "Write operation returned 0", self, offset, written,
                 )
             elif res < 0:
                 # fix for linux_aio implementation bug in caio<=0.6.1

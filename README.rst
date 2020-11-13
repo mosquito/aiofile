@@ -51,20 +51,25 @@ Code examples
 
 All code examples requires python 3.6+.
 
-Write and Read
+High-level API
 ++++++++++++++
+
+``async_open`` helper
+~~~~~~~~~~~~~~~~~~~~~
+
+The ``async_open`` helper creates file like object with file-like methods:
 
 .. code-block:: python
 
     import asyncio
-    from aiofile import AIOFile
+    from aiofile import async_open
 
 
     async def main():
-        async with AIOFile("/tmp/hello.txt", 'w+') as afp:
+        async with async_open("/tmp/hello.txt", 'w+') as afp:
             await afp.write("Hello ")
-            await afp.write("world", offset=7)
-            await afp.fsync()
+            await afp.write("world")
+            afp.seek(0)
 
             print(await afp.read())
 
@@ -73,8 +78,17 @@ Write and Read
     loop.run_until_complete(main())
 
 
-Write and read with helpers
-+++++++++++++++++++++++++++
+Supported methods:
+
+* ``async def read(length = -1)`` - reading chunk from file, when length is -1
+  will read whole file.
+* ``async def write(data)`` - write chunk to file
+* ``def seek(offset)`` - set file pointer position
+* ``def tell()`` - returns current file pointer position
+
+
+``Reader`` and ``Writer``
+~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: python
 
@@ -101,8 +115,8 @@ Write and read with helpers
 
 
 
-Read file line by line
-++++++++++++++++++++++
+``LineReader`` - read file line by line
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: python
 
@@ -129,67 +143,36 @@ Read file line by line
     loop = asyncio.get_event_loop()
     loop.run_until_complete(main())
 
+Low-level API
++++++++++++++
 
-Reading and Writing for the unix pipe
-+++++++++++++++++++++++++++++++++++++
+Following API is just little bit sugared ``caio`` API.
+
+Write and Read
+~~~~~~~~~~~~~~
 
 .. code-block:: python
 
-    import os
     import asyncio
-    from aiofile import AIOFile, Reader, Writer
-
-
-    async def reader(fname):
-        print('Start reader')
-        async with AIOFile(fname, 'r') as afp:
-            while True:
-                # Maximum expected chunk size, must be passed.
-                # Otherwise will be read zero bytes
-                # (because unix pipe has zero size)
-                data = await afp.read(4096)
-                print(data)
-
-
-    async def writer(fname):
-        print('Start writer')
-        async with AIOFile(fname, 'w') as afp:
-            while True:
-                await asyncio.sleep(1)
-                await afp.write('%06f' % loop.time())
+    from aiofile import AIOFile
 
 
     async def main():
-        fifo_name = "/tmp/test.fifo"
+        async with AIOFile("/tmp/hello.txt", 'w+') as afp:
+            await afp.write("Hello ")
+            await afp.write("world", offset=7)
+            await afp.fsync()
 
-        if os.path.exists(fifo_name):
-            os.remove(fifo_name)
-
-        os.mkfifo(fifo_name)
-
-        # Starting two readers and one writer, but only one reader
-        # will be reading at the same time.
-        await asyncio.gather(
-            reader(fifo_name),
-            reader(fifo_name),
-            writer(fifo_name),
-        )
+            print(await afp.read())
 
 
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(main())
 
-    try:
-        loop.run_until_complete(main())
-    finally:
-        # Shutting down and closing file descriptors after interrupt
-        loop.run_until_complete(loop.shutdown_asyncgens())
-        loop.close()
-        print('Exited')
 
 
 Read file line by line
-++++++++++++++++++++++
+~~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: python
 
@@ -215,6 +198,10 @@ Read file line by line
     loop = asyncio.get_event_loop()
     loop.run_until_complete(main())
 
+More examples
+-------------
+
+Useful examples with ``aiofile``
 
 Async CSV Dict Reader
 +++++++++++++++++++++
