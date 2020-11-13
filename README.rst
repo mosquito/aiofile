@@ -54,8 +54,8 @@ All code examples requires python 3.6+.
 High-level API
 ++++++++++++++
 
-async_open helper
-~~~~~~~~~~~~~~~~~
+``async_open`` helper
+~~~~~~~~~~~~~~~~~~~~~
 
 The ``async_open`` helper creates file like object with file-like methods:
 
@@ -146,6 +146,8 @@ Supported methods:
 Low-level API
 +++++++++++++
 
+Following API is just little bit sugared ``caio`` API.
+
 Write and Read
 ~~~~~~~~~~~~~~
 
@@ -196,6 +198,10 @@ Read file line by line
     loop = asyncio.get_event_loop()
     loop.run_until_complete(main())
 
+More examples
+-------------
+
+Useful examples with ``aiofile``
 
 Async CSV Dict Reader
 +++++++++++++++++++++
