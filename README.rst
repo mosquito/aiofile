@@ -80,8 +80,8 @@ The ``async_open`` helper creates file like object with file-like methods:
 
 Supported methods:
 
-* ``async def read(length = -1)`` - reading chunk from file, when length is -1
-  will read whole file.
+* ``async def read(length = -1)`` - reading chunk from file, when length is
+  ``-1`` will be read file to the end.
 * ``async def write(data)`` - write chunk to file
 * ``def seek(offset)`` - set file pointer position
 * ``def tell()`` - returns current file pointer position
@@ -89,6 +89,9 @@ Supported methods:
 
 ``Reader`` and ``Writer``
 ~~~~~~~~~~~~~~~~~~~~~~~~~
+
+When you want to read or write file linearly following example
+might be helpful.
 
 .. code-block:: python
 
@@ -118,6 +121,14 @@ Supported methods:
 ``LineReader`` - read file line by line
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+LineReader is a helper that is very effective when you want to read a file
+linearly and line by line.
+
+It contains a buffer and will read the fragments of the file chunk by
+chunk into the buffer, where it will try to find lines.
+
+The default chunk size is 4KB.
+
 .. code-block:: python
 
     import asyncio
@@ -142,6 +153,10 @@ Supported methods:
 
     loop = asyncio.get_event_loop()
     loop.run_until_complete(main())
+
+
+When you want to read file by lines please avoid to use ``async_open``
+use ``LineReader`` instead.
 
 Low-level API
 +++++++++++++
