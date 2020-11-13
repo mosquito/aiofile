@@ -1,7 +1,9 @@
 import asyncio
 import io
+import os
 import typing
 from collections.abc import AsyncIterable
+from pathlib import Path
 from types import MappingProxyType
 
 from .aio import AIOFile
@@ -10,11 +12,13 @@ from .aio import AIOFile
 ENCODING_MAP = MappingProxyType({
     "utf-8": 4,
     "utf-16": 8,
+    "UTF-8": 4,
+    "UTF-16": 8,
 })
 
 
 async def unicode_reader(
-    afp: AIOFile, chunk_size: int, offset: int, encoding: str = 'utf-8'
+    afp: AIOFile, chunk_size: int, offset: int, encoding: str = "utf-8"
 ) -> typing.Tuple[int, str]:
 
     last_error = None
@@ -38,8 +42,10 @@ class Reader(AsyncIterable):
 
     CHUNK_SIZE = 32 * 1024
 
-    def __init__(self, aio_file: AIOFile, offset: int = 0,
-                 chunk_size: int = CHUNK_SIZE):
+    def __init__(
+        self, aio_file: AIOFile, offset: int = 0,
+        chunk_size: int = CHUNK_SIZE,
+    ):
 
         self.__lock = asyncio.Lock()
         self.__offset = int(offset)
@@ -52,13 +58,13 @@ class Reader(AsyncIterable):
         async with self.__lock:
             if self.file.mode.binary:
                 chunk = await self.file.read_bytes(
-                    self._chunk_size, self.__offset
+                    self._chunk_size, self.__offset,
                 )
                 chunk_size = len(chunk)
             else:
                 chunk_size, chunk = await unicode_reader(
                     self.file, self._chunk_size, self.__offset,
-                    encoding=self.encoding
+                    encoding=self.encoding,
                 )
         self.__offset += chunk_size
         return chunk
@@ -146,15 +152,28 @@ class LineReader(AsyncIterable):
 
 class FileIOWrapperBase:
     def __init__(self, afp: AIOFile, *, offset: int = 0):
-        self.__offset = offset
+        self._offset = offset
         self._lock = asyncio.Lock()
         self.file = afp
 
+        if self.file.mode.appending:
+            self._offset = os.stat(afp.name).st_size
+
+    def seek(self, offset: int):
+        self._offset = offset
+
     def tell(self) -> int:
-        return self.__offset
+        return self._offset
 
     async def close(self):
         await self.file.close()
+
+    async def __aenter__(self):
+        await self.file.open()
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        await self.close()
 
 
 class BinaryFileWrapper(FileIOWrapperBase):
@@ -163,17 +182,18 @@ class BinaryFileWrapper(FileIOWrapperBase):
             raise ValueError("Expected file in binary mode")
         super().__init__(afp)
 
-    async def read(self, length) -> bytes:
+    async def read(self, length: int = -1) -> bytes:
         async with self._lock:
-            data = await self.file.read_bytes(length, self.__offset)
-            self.__offset += len(data)
+            data = await self.file.read_bytes(length, self._offset)
+            self._offset += len(data)
         return data
 
-    async def write(self, data: bytes) -> None:
+    async def write(self, data: bytes) -> int:
         async with self._lock:
-            operation = self.file.write_bytes(data, self.__offset)
-            self.__offset += len(data)
+            operation = self.file.write_bytes(data, self._offset)
+            self._offset += len(data)
         await operation
+        return len(data)
 
 
 class TextFileWrapper(FileIOWrapperBase):
@@ -183,21 +203,33 @@ class TextFileWrapper(FileIOWrapperBase):
         super().__init__(afp)
         self.encoding = self.file.encoding
 
-    async def read(self, length) -> str:
+    async def read(self, length: int = -1) -> str:
         async with self._lock:
             chunk_size, chunk = await unicode_reader(
-                self.file, length, self.__offset, self.encoding
+                self.file, length, self._offset, self.encoding,
             )
-            self.__offset += chunk_size
+            self._offset += chunk_size
         return chunk
 
-    async def write(self, data: str) -> None:
+    async def write(self, data: str) -> int:
         async with self._lock:
             data_bytes = data.encode(self.encoding)
-            operation = self.file.write_bytes(data_bytes, self.__offset)
-            self.__offset += len(data_bytes)
+            operation = self.file.write_bytes(data_bytes, self._offset)
+            self._offset += len(data_bytes)
 
         await operation
+        return len(data_bytes)
+
+
+def async_open(
+    file_name: typing.Union[str, Path], mode: str, *args, **kwargs
+) -> typing.Union[BinaryFileWrapper, TextFileWrapper]:
+    afp = AIOFile(str(file_name), mode, *args, **kwargs)
+
+    if not afp.mode.binary:
+        return TextFileWrapper(afp)
+
+    return BinaryFileWrapper(afp)
 
 
 __all__ = (

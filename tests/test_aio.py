@@ -13,7 +13,9 @@ import caio
 import pytest
 
 from aiofile import AIOFile
-from aiofile.utils import LineReader, Reader, Writer
+from aiofile.utils import (
+    LineReader, Reader, Writer, TextFileWrapper, BinaryFileWrapper,
+    async_open)
 
 from .impl import split_by
 
@@ -369,3 +371,71 @@ async def test_write_returned_zero(temp_file, loop):
         ctx.write.return_value = 0
         with pytest.raises(RuntimeError, match='Write operation returned 0'):
             await afp.write('aiofile')
+
+
+async def test_text_io_wrapper(aio_file_maker, temp_file):
+    async with aio_file_maker(temp_file, 'w+') as afp:
+        data = '💾💀☏⎃♞🏁'
+        await afp.write(data * 32)
+
+    with open(temp_file, "a+") as fp:
+        assert not fp.read(1)
+        fp.seek(0)
+        assert fp.read() == data * 32
+
+        fp.seek(0)
+        assert fp.read(1) == '💾'
+        assert fp.tell() == 4
+
+    async with TextFileWrapper(aio_file_maker(temp_file, 'a+')) as fp:
+        assert not await fp.read(1)
+        fp.seek(0)
+        assert await fp.read() == data * 32
+
+        fp.seek(0)
+        assert await fp.read(1) == '💾'
+        assert fp.tell() == 4
+
+
+async def test_binary_io_wrapper(aio_file_maker, temp_file):
+    async with aio_file_maker(temp_file, 'wb+') as afp:
+        data = b'\x01\x02\x03'
+        await afp.write(data * 32)
+
+    with open(temp_file, "ab+") as fp:
+        assert not fp.read(1)
+        fp.seek(0)
+        assert fp.read() == data * 32
+
+        fp.seek(0)
+        assert fp.read(1) == b"\x01"
+        assert fp.tell() == 1
+
+    async with BinaryFileWrapper(aio_file_maker(temp_file, 'ab+')) as fp:
+        assert not await fp.read(1)
+        fp.seek(0)
+        assert await fp.read() == data * 32
+
+        fp.seek(0)
+        assert await fp.read(1) == b"\x01"
+        assert fp.tell() == 1
+
+
+async def test_async_open(aio_file_maker, temp_file):
+    async with aio_file_maker(temp_file, 'wb+') as afp:
+        data = b'\x01\x02\x03' + "🏴‍☠️".encode()
+        await afp.write(data * 32)
+
+    assert isinstance(async_open(temp_file, "ab+"), BinaryFileWrapper)
+
+    async with async_open(temp_file, 'ab+') as fp:
+        assert not await fp.read(1)
+        fp.seek(3)
+        assert await fp.read(13) == "🏴‍☠️".encode()
+
+    assert isinstance(async_open(temp_file, "a+"), TextFileWrapper)
+
+    async with async_open(temp_file, 'a+') as fp:
+        assert not await fp.read(1)
+        fp.seek(3)
+        assert await fp.read(13) == "🏴‍☠️"
