@@ -375,13 +375,13 @@ async def test_write_returned_zero(temp_file, loop):
 
 async def test_text_io_wrapper(aio_file_maker, temp_file):
     async with aio_file_maker(temp_file, 'w+') as afp:
-        data = '💾💀☏⎃♞🏁'
-        await afp.write(data * 32)
+        data = '💾💀'
+        await afp.write(data * 5)
 
     with open(temp_file, "a+", encoding='utf-8') as fp:
         assert not fp.read(1)
         fp.seek(0)
-        assert fp.read() == data * 32
+        assert fp.read() == data * 5
 
         fp.seek(0)
         assert fp.read(1) == '💾'
@@ -390,7 +390,8 @@ async def test_text_io_wrapper(aio_file_maker, temp_file):
     async with TextFileWrapper(aio_file_maker(temp_file, 'a+')) as fp:
         assert not await fp.read(1)
         fp.seek(0)
-        assert await fp.read() == data * 32
+        chunk = await fp.read()
+        assert chunk == data * 5
 
         fp.seek(0)
         assert await fp.read(1) == '💾'

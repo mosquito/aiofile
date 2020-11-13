@@ -2,6 +2,7 @@ import asyncio
 import io
 import os
 import typing
+from abc import ABC, abstractmethod
 from collections.abc import AsyncIterable
 from pathlib import Path
 from types import MappingProxyType
@@ -21,11 +22,15 @@ async def unicode_reader(
     afp: AIOFile, chunk_size: int, offset: int, encoding: str = "utf-8"
 ) -> typing.Tuple[int, str]:
 
+    if chunk_size < 0:
+        chunk = await afp.read_bytes(-1, offset)
+        return len(chunk), chunk.decode(encoding=encoding)
+
     last_error = None
     for retry in range(ENCODING_MAP.get(encoding, 4)):
         chunk_bytes = await afp.read_bytes(chunk_size + retry, offset)
         try:
-            chunk = chunk_bytes.decode()
+            chunk = chunk_bytes.decode(encoding=encoding)
             break
         except UnicodeDecodeError as e:
             last_error = e
@@ -150,7 +155,7 @@ class LineReader(AsyncIterable):
         return self
 
 
-class FileIOWrapperBase:
+class FileIOWrapperBase(ABC):
     _READLINE_CHUNK_SIZE = 4192
 
     def __init__(self, afp: AIOFile, *, offset: int = 0):
@@ -176,6 +181,18 @@ class FileIOWrapperBase:
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         await self.close()
+
+    @abstractmethod
+    async def read(self, length: int = -1) -> typing.Any:
+        raise NotImplementedError
+
+    @abstractmethod
+    async def write(self, data: typing.Any) -> int:
+        raise NotImplementedError
+
+    @abstractmethod
+    async def readline(self, size: int, newline: typing.Any) -> typing.Any:
+        raise NotImplementedError
 
 
 class BinaryFileWrapper(FileIOWrapperBase):
@@ -236,7 +253,7 @@ class TextFileWrapper(FileIOWrapperBase):
         chunk_size = 0
         offset = self._offset
         chunk = ""
-        while length > len(chunk):
+        while length < 0 or length > len(chunk):
             part_offset, part = await unicode_reader(
                 self.file, length, offset, self.encoding,
             )
@@ -247,7 +264,7 @@ class TextFileWrapper(FileIOWrapperBase):
             chunk += part
             offset += part_offset
 
-        if chunk_size > length:
+        if chunk_size > length > 0:
             chunk = chunk[:length]
             offset = length
 
