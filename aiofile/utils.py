@@ -23,8 +23,8 @@ async def unicode_reader(
 ) -> typing.Tuple[int, str]:
 
     if chunk_size < 0:
-        chunk = await afp.read_bytes(-1, offset)
-        return len(chunk), chunk.decode(encoding=encoding)
+        chunk_bytes = await afp.read_bytes(-1, offset)
+        return len(chunk_bytes), chunk_bytes.decode(encoding=encoding)
 
     last_error = None
     for retry in range(ENCODING_MAP.get(encoding, 4)):
