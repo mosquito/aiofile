@@ -378,7 +378,7 @@ async def test_text_io_wrapper(aio_file_maker, temp_file):
         data = '💾💀☏⎃♞🏁'
         await afp.write(data * 32)
 
-    with open(temp_file, "a+") as fp:
+    with open(temp_file, "a+", encoding='utf-8') as fp:
         assert not fp.read(1)
         fp.seek(0)
         assert fp.read() == data * 32
