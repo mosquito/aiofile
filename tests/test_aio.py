@@ -424,7 +424,7 @@ async def test_binary_io_wrapper(aio_file_maker, temp_file):
 
 async def test_async_open(aio_file_maker, temp_file):
     async with aio_file_maker(temp_file, 'wb+') as afp:
-        data = b'\x01\x02\x03' + "🏴‍☠️".encode()
+        data = b'\x01\x02\x03' + "🦠📱".encode()
         await afp.write(data * 32)
 
     assert isinstance(async_open(temp_file, "ab+"), BinaryFileWrapper)
@@ -432,19 +432,19 @@ async def test_async_open(aio_file_maker, temp_file):
     async with async_open(temp_file, 'ab+') as fp:
         assert not await fp.read(1)
         fp.seek(3)
-        assert await fp.read(13) == "🏴‍☠️".encode()
+        assert await fp.read(8) == "🦠📱".encode()
 
     assert isinstance(async_open(temp_file, "a+"), TextFileWrapper)
 
     async with async_open(temp_file, 'a+') as fp:
         assert not await fp.read(1)
         fp.seek(3)
-        assert await fp.read(13) == "🏴‍☠️"
+        assert await fp.read(2) == "🦠📱"
 
 
 async def test_async_open_unicode(aio_file_maker, temp_file):
     async with aio_file_maker(temp_file, 'w+') as afp:
-        data = "🏁💾💩🦠"
+        data = "🏁💾🏴‍☠️"
         await afp.write(data)
 
     async with async_open(temp_file, 'a+') as afp:
