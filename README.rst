@@ -35,6 +35,8 @@ Features
   thread-based implementations (c-based and pure-python).
 * AIOFile has no internal pointer. You should pass ``offset`` and
   ``chunk_size`` for each operation or use helpers (Reader or Writer).
+  The simples way is use ``async_open`` for create object with
+  file-like interface.
 * For Linux using implementation based on `libaio`_.
 * For POSIX (MacOS X and optional Linux) using implementation
   using on `threadpool`_.
