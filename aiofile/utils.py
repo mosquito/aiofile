@@ -30,7 +30,7 @@ async def unicode_reader(
         except UnicodeDecodeError as e:
             last_error = e
     else:
-        raise last_error
+        raise last_error    # type: ignore
 
     chunk_size = len(chunk_bytes)
 
@@ -59,7 +59,7 @@ class Reader(AsyncIterable):
             if self.file.mode.binary:
                 chunk = await self.file.read_bytes(
                     self._chunk_size, self.__offset,
-                )
+                )   # type: typing.Union[str, bytes]
                 chunk_size = len(chunk)
             else:
                 chunk_size, chunk = await unicode_reader(
@@ -122,7 +122,7 @@ class LineReader(AsyncIterable):
             chunk = await self.__reader.read_chunk()
 
             if chunk:
-                if self.linesep not in chunk:
+                if self.linesep not in chunk:   # type: ignore
                     self._buffer.write(chunk)
                     continue
 
