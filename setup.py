@@ -56,5 +56,5 @@ setup(
             "pytest-cov",
         ],
     },
-    install_requires=["caio~=0.6.0"],
+    install_requires=["caio~=0.7.0"],
 )
