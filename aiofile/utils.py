@@ -305,7 +305,8 @@ class TextFileWrapper(FileIOWrapperBase):
 
                     fp.seek(0)
                     line = fp.readline()
-                    self._offset = offset + fp.tell()
+                    self._offset = offset + len(
+                        line.encode(encoding=self.encoding))
                     return line
 
 
