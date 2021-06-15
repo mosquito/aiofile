@@ -48,6 +48,17 @@ Features
 .. _threadpool: https://github.com/mbrossard/threadpool/
 
 
+Limitations
+-----------
+
+* Linux native AIO implementation not able to open special files.
+  Asynchronous operations against special fs like ``/proc/`` ``/sys/`` not
+  supported by the kernel. It's not a `aiofile`s or `caio` issue.
+  To In this cases, you might switch to thread-based implementations
+  (see troubleshooting_ section).
+  However, when used on supported file systems, the linux implementation has a
+  smaller overhead and preferred but it's not a silver bullet.
+
 Code examples
 -------------
 
@@ -301,6 +312,7 @@ Async CSV Dict Reader
         loop.run_until_complete(loop.shutdown_asyncgens())
         loop.close()
 
+.. _troubleshooting:
 
 Troubleshooting
 ---------------
@@ -322,7 +334,31 @@ possible values:
 * ``thread`` - use thread based implementation written in C
 * ``python`` - use pure python implementation
 
-2.  File ``default_implementation`` located near ``__init__.py`` in caio
+2. File ``default_implementation`` located near ``__init__.py`` in caio
 installation path. It's useful for distros package maintainers. This file
 might contains comments (lines starts with ``#`` symbol) and the first line
 should be one of ``linux`` ``thread`` or ``python``.
+
+3. You might manually manage contexts:
+
+.. code-block:: python
+
+    import asyncio
+
+    from aiofile import async_open
+    from caio import linux_aio, thread_aio
+
+
+    async def main():
+        linux_ctx = linux_aio.Context()
+        threads_ctx = thread_aio.Context()
+
+        async with async_open("/tmp/test.txt", "a", context=linux_ctx) as afp:
+            await afp.write("Hello")
+
+        async with async_open("/tmp/test.txt", "a", context=threads_ctx) as afp:
+            print(await afp.read())
+
+
+    asyncio.run(main())
+
