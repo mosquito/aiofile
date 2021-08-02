@@ -1,6 +1,7 @@
 import asyncio
 import os
 from collections import namedtuple
+from concurrent.futures import Executor
 from functools import partial
 from os import strerror
 from pathlib import Path
@@ -111,6 +112,7 @@ class AIOFile:
         self, filename: Union[str, Path],
         mode: str = "r", encoding: str = "utf-8",
         context: Optional[AsyncioContextBase] = None,
+        executor: Optional[Executor] = None,
     ):
 
         self.__context = context or get_default_context()
@@ -122,12 +124,13 @@ class AIOFile:
 
         self.__file_obj = None
         self.__encoding = encoding
+        self.__executor = executor
 
     def _run_in_thread(
             self, func, *args, **kwargs
     ) -> Coroutine[Any, Any, Any]:
         return self.__context.loop.run_in_executor(
-            None, partial(func, *args, **kwargs),
+            self.__executor, partial(func, *args, **kwargs),
         )
 
     @property
