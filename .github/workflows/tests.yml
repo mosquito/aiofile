@@ -43,16 +43,43 @@ jobs:
       fail-fast: false
 
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
         include:
           - python-versions: 3.6
             toxenv: py36
+            os: ubuntu-latest
           - python-versions: 3.7
             toxenv: py37
+            os: ubuntu-latest
           - python-versions: 3.8
             toxenv: py38
+            os: ubuntu-latest
           - python-versions: 3.9
             toxenv: py39
+            os: ubuntu-latest
+          - python-versions: 3.6
+            toxenv: py36
+            os: macos-latest
+          - python-versions: 3.7
+            toxenv: py37
+            os: macos-latest
+          - python-versions: 3.8
+            toxenv: py38
+            os: macos-latest
+          - python-versions: 3.9
+            toxenv: py39
+            os: macos-latest
+          - python-versions: 3.6
+            toxenv: py36
+            os: windows-latest
+          - python-versions: 3.7
+            toxenv: py37
+            os: windows-latest
+          - python-versions: 3.8
+            toxenv: py38
+            os: windows-latest
+          - python-versions: 3.9
+            toxenv: py39
+            os: windows-latest
 
     needs: lint
     runs-on: ${{ matrix.os }}
