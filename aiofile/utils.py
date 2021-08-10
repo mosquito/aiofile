@@ -165,6 +165,20 @@ class FileIOWrapperBase(ABC):
         if self.file.mode.appending:
             self._offset = os.stat(afp.name).st_size
 
+    @abstractmethod
+    async def read(self, length: int = -1) -> typing.Any:
+        raise NotImplementedError
+
+    @abstractmethod
+    async def write(self, data: typing.Any) -> int:
+        raise NotImplementedError
+
+    @abstractmethod
+    async def readline(
+        self, size: int = -1, newline: typing.Any = ...
+    ) -> typing.Union[str, bytes]:
+        raise NotImplementedError
+
     def seek(self, offset: int):
         self._offset = offset
 
@@ -181,12 +195,6 @@ class FileIOWrapperBase(ABC):
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         await self.close()
 
-    async def readline(
-        self, size: int = -1,
-        newline: typing.Union[bytes, str, None] = None
-    ) -> bytes:
-        raise NotImplementedError
-
     async def __aiter__(self) -> typing.AsyncIterable[typing.Union[str, bytes]]:
         line = await self.readline()
         while line:
@@ -198,18 +206,6 @@ class FileIOWrapperBase(ABC):
         while chunk:
             yield chunk
             chunk = await self.read(chunk_size)
-
-    @abstractmethod
-    async def read(self, length: int = -1) -> typing.Any:
-        raise NotImplementedError
-
-    @abstractmethod
-    async def write(self, data: typing.Any) -> int:
-        raise NotImplementedError
-
-    @abstractmethod
-    async def readline(self, size: int, newline: typing.Any) -> typing.Any:
-        raise NotImplementedError
 
 
 class BinaryFileWrapper(FileIOWrapperBase):
