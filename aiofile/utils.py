@@ -5,7 +5,7 @@ import os
 from abc import ABC, abstractmethod
 from pathlib import Path
 from types import MappingProxyType
-from typing import AsyncIterable, Any, Tuple, Union
+from typing import Any, Tuple, Union
 
 from .aio import AIOFile, FileIOType
 
@@ -63,7 +63,7 @@ class Reader(collections.abc.AsyncIterable):
             if self.file.mode.binary:
                 chunk = await self.file.read_bytes(
                     self._chunk_size, self.__offset,
-                )   # type: t.Union[str, bytes]
+                )   # type: Union[str, bytes]
                 chunk_size = len(chunk)
             else:
                 chunk_size, chunk = await unicode_reader(
@@ -113,7 +113,7 @@ class LineReader(collections.abc.AsyncIterable):
 
         self._buffer = (
             io.BytesIO() if aio_file.mode.binary else io.StringIO()
-        )   # type: t.Any
+        )   # type: Any
 
         self.linesep = (
             aio_file.encode_bytes(line_sep)
@@ -195,17 +195,11 @@ class FileIOWrapperBase(ABC):
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         await self.close()
 
-    async def __aiter__(self) -> AsyncIterable[Union[str, bytes]]:
-        line = await self.readline()
-        while line:
-            yield line
-            line = await self.readline()
+    def __aiter__(self) -> LineReader:
+        return LineReader(self.file)
 
-    async def iter_chunked(self, chunk_size: int = 65535):
-        chunk = await self.read(chunk_size)
-        while chunk:
-            yield chunk
-            chunk = await self.read(chunk_size)
+    def iter_chunked(self, chunk_size: int = Reader.CHUNK_SIZE) -> Reader:
+        return Reader(self.file, chunk_size=chunk_size)
 
 
 class BinaryFileWrapper(FileIOWrapperBase):
