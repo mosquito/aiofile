@@ -1,7 +1,7 @@
 import asyncio
 import io
 import os
-import typing
+import typing as t
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterable
 from pathlib import Path
@@ -19,7 +19,7 @@ ENCODING_MAP = MappingProxyType({
 
 async def unicode_reader(
     afp: AIOFile, chunk_size: int, offset: int, encoding: str = "utf-8"
-) -> typing.Tuple[int, str]:
+) -> t.Tuple[int, str]:
 
     if chunk_size < 0:
         chunk_bytes = await afp.read_bytes(-1, offset)
@@ -58,12 +58,12 @@ class Reader(AsyncIterable):
         self.file = aio_file
         self.encoding = self.file.encoding
 
-    async def read_chunk(self) -> typing.Union[str, bytes]:
+    async def read_chunk(self) -> t.Union[str, bytes]:
         async with self.__lock:
             if self.file.mode.binary:
                 chunk = await self.file.read_bytes(
                     self._chunk_size, self.__offset,
-                )   # type: typing.Union[str, bytes]
+                )   # type: t.Union[str, bytes]
                 chunk_size = len(chunk)
             else:
                 chunk_size, chunk = await unicode_reader(
@@ -113,7 +113,7 @@ class LineReader(AsyncIterable):
 
         self._buffer = (
             io.BytesIO() if aio_file.mode.binary else io.StringIO()
-        )   # type: typing.Any
+        )   # type: t.Any
 
         self.linesep = (
             aio_file.encode_bytes(line_sep)
@@ -121,7 +121,7 @@ class LineReader(AsyncIterable):
             else line_sep
         )
 
-    async def readline(self) -> typing.Union[str, bytes]:
+    async def readline(self) -> t.Union[str, bytes]:
         while True:
             chunk = await self.__reader.read_chunk()
 
@@ -142,7 +142,7 @@ class LineReader(AsyncIterable):
 
             return line
 
-    async def __anext__(self) -> typing.Union[bytes, str]:
+    async def __anext__(self) -> t.Union[bytes, str]:
         line = await self.readline()
 
         if not line:
@@ -166,17 +166,17 @@ class FileIOWrapperBase(ABC):
             self._offset = os.stat(afp.name).st_size
 
     @abstractmethod
-    async def read(self, length: int = -1) -> typing.Any:
+    async def read(self, length: int = -1) -> t.Any:
         raise NotImplementedError
 
     @abstractmethod
-    async def write(self, data: typing.Any) -> int:
+    async def write(self, data: t.Any) -> int:
         raise NotImplementedError
 
     @abstractmethod
     async def readline(
-        self, size: int = -1, newline: typing.Any = ...
-    ) -> typing.Union[str, bytes]:
+        self, size: int = -1, newline: t.Any = ...
+    ) -> t.Union[str, bytes]:
         raise NotImplementedError
 
     def seek(self, offset: int):
@@ -195,7 +195,7 @@ class FileIOWrapperBase(ABC):
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         await self.close()
 
-    async def __aiter__(self) -> typing.AsyncIterable[typing.Union[str, bytes]]:
+    async def __aiter__(self) -> t.AsyncIterable[t.Union[str, bytes]]:
         line = await self.readline()
         while line:
             yield line
@@ -324,9 +324,9 @@ class TextFileWrapper(FileIOWrapperBase):
 
 
 def async_open(
-    file_specifier: typing.Union[str, Path, FileIOType],
+    file_specifier: t.Union[str, Path, FileIOType],
     mode: str = "r", *args, **kwargs
-) -> typing.Union[BinaryFileWrapper, TextFileWrapper]:
+) -> t.Union[BinaryFileWrapper, TextFileWrapper]:
     if isinstance(file_specifier, (str, Path)):
         afp = AIOFile(str(file_specifier), mode, *args, **kwargs)
     else:

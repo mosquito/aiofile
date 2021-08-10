@@ -5,7 +5,7 @@ from concurrent.futures import Executor
 from functools import partial
 from os import strerror
 from pathlib import Path
-from typing import Any, Coroutine, Optional, Union, IO, TextIO, BinaryIO
+from typing import Any, Coroutine, Optional, Union, TextIO, BinaryIO
 from weakref import finalize
 
 import caio
@@ -30,7 +30,7 @@ FileMode = namedtuple(
 )
 
 
-def parse_mode(mode: str) -> FileMode:
+def parse_mode(mode: str) -> FileMode:    # noqa: C901
     """ Rewritten from `cpython fileno`_
 
     .. _cpython fileio: https://bit.ly/2JY2cnp
