@@ -187,7 +187,7 @@ class FileIOWrapperBase(ABC):
     ) -> bytes:
         raise NotImplementedError
 
-    async def __aiter__(self) -> AsyncIterable[typing.Union[str, bytes]]:
+    async def __aiter__(self) -> typing.AsyncIterable[typing.Union[str, bytes]]:
         line = await self.readline()
         while line:
             yield line
