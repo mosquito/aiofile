@@ -93,6 +93,26 @@ The ``async_open`` helper creates file like object with file-like methods:
     loop = asyncio.get_event_loop()
     loop.run_until_complete(main())
 
+Example with opening already opened file pointer:
+
+.. code-block:: python
+
+    import asyncio
+    from typing import IO, Any
+    from aiofile import async_open
+
+
+    async def main(fp: IO[Any]):
+        async with async_open(fp) as afp:
+            await afp.write("Hello from\nasync world")
+            print(await afp.readline())
+
+
+    with open("test.txt", "w+") as fp:
+        loop = asyncio.get_event_loop()
+        loop.run_until_complete(main(fp))
+
+
 Supported methods:
 
 * ``async def read(length = -1)`` - reading chunk from file, when length is
