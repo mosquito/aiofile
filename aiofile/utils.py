@@ -193,6 +193,12 @@ class FileIOWrapperBase(ABC):
             yield line
             line = await self.readline()
 
+    async def iter_chunked(self, chunk_size: int = 65535):
+        chunk = await self.read(chunk_size)
+        while chunk:
+            yield chunk
+            chunk = await self.read(chunk_size)
+
     @abstractmethod
     async def read(self, length: int = -1) -> typing.Any:
         raise NotImplementedError

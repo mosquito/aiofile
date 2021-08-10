@@ -537,3 +537,31 @@ async def test_async_open_line_iter(aio_file_maker, tmp_path: Path):
             assert line.endswith(b'\n')
             assert int(line.decode().strip()) == idx
             idx += 1
+
+
+async def test_async_open_iter_chunked(aio_file_maker, tmp_path: Path):
+    src_path = tmp_path / "src.txt"
+    dst_path = tmp_path / "dst.txt"
+
+    async with async_open(src_path, "w") as afp:
+        for i in range(0, 5000):
+            await afp.write(str(i))
+            await afp.write('\n')
+
+    async with async_open(src_path, "r") as src, \
+               async_open(dst_path, "w") as dest:
+        async for chunk in src.iter_chunked():
+            await dest.write(chunk)
+
+    assert src_path.stat().st_size == dst_path.stat().st_size
+
+    def hash_file(path):
+        with open(path, "rb") as fp:
+            hasher = hashlib.md5()
+            chunk = fp.read(65535)
+            while chunk:
+                hasher.update(chunk)
+                chunk = fp.read(65535)
+            return hasher.hexdigest()
+
+    assert hash_file(src_path) == hash_file(dst_path)
