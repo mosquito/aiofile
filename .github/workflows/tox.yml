@@ -30,7 +30,7 @@ jobs:
           python-version: 3.9
           architecture: x64
 
-      - name: Creating a virtualenv python 3.9
+      - name: Installing tox
         run: python -m pip install tox
 
       - name: tox ${{ matrix.linter }}
@@ -61,7 +61,7 @@ jobs:
           python-version: ${{ matrix.python-versions }}
           architecture: x64
 
-      - name: Creating a virtualenv python ${{ matrix.python-versions }}
+      - name: Installing tox
         run: python -m pip install tox
 
       - name: tox ${{ matrix.toxenv }}
