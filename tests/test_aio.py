@@ -511,3 +511,29 @@ async def test_async_open_fp(aio_file_maker, tmp_path: Path):
             assert afp.file.mode.binary
 
         assert fp.read().decode() == data
+
+
+async def test_async_open_line_iter(aio_file_maker, tmp_path: Path):
+    async with async_open(tmp_path / "file.txt", "w+") as afp:
+        for i in range(100, 500):
+            await afp.write(str(i))
+            await afp.write('\n')
+
+        afp.seek(0)
+        idx = 100
+        async for line in afp:
+            assert line.endswith("\n")
+            assert int(line.strip()) == idx
+            idx += 1
+
+    async with async_open(tmp_path / "file.bin", "wb+") as afp:
+        for i in range(100, 500):
+            await afp.write(str(i).encode())
+            await afp.write(b'\n')
+
+        afp.seek(0)
+        idx = 100
+        async for line in afp:
+            assert line.endswith(b'\n')
+            assert int(line.decode().strip()) == idx
+            idx += 1

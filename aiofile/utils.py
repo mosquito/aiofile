@@ -181,6 +181,18 @@ class FileIOWrapperBase(ABC):
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         await self.close()
 
+    async def readline(
+        self, size: int = -1,
+        newline: typing.Union[bytes, str, None] = None
+    ) -> bytes:
+        raise NotImplementedError
+
+    async def __aiter__(self) -> AsyncIterable[typing.Union[str, bytes]]:
+        line = await self.readline()
+        while line:
+            yield line
+            line = await self.readline()
+
     @abstractmethod
     async def read(self, length: int = -1) -> typing.Any:
         raise NotImplementedError
