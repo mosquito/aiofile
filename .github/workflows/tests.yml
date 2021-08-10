@@ -1,0 +1,103 @@
+# This workflow will install Python dependencies, run tests and lint with a single version of Python
+# For more information see: https://help.github.com/actions/language-and-framework-guides/using-python-with-github-actions
+
+name: tox
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  lint:
+
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        linter:
+          - lint
+          - checkdoc
+          - mypy
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Setting up python 3.9
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.9
+          architecture: x64
+
+      - name: Installing tox
+        run: python -m pip install tox
+
+      - name: tox ${{ matrix.linter }}
+        run: tox
+        env:
+          TOXENV: ${{ matrix.linter }}
+
+  tests:
+    strategy:
+      fail-fast: false
+
+      matrix:
+        include:
+          - python-versions: 3.6
+            toxenv: py36
+            os: ubuntu-latest
+          - python-versions: 3.7
+            toxenv: py37
+            os: ubuntu-latest
+          - python-versions: 3.8
+            toxenv: py38
+            os: ubuntu-latest
+          - python-versions: 3.9
+            toxenv: py39
+            os: ubuntu-latest
+          - python-versions: 3.6
+            toxenv: py36
+            os: macos-latest
+          - python-versions: 3.7
+            toxenv: py37
+            os: macos-latest
+          - python-versions: 3.8
+            toxenv: py38
+            os: macos-latest
+          - python-versions: 3.9
+            toxenv: py39
+            os: macos-latest
+          - python-versions: 3.6
+            toxenv: py36
+            os: windows-latest
+          - python-versions: 3.7
+            toxenv: py37
+            os: windows-latest
+          - python-versions: 3.8
+            toxenv: py38
+            os: windows-latest
+          - python-versions: 3.9
+            toxenv: py39
+            os: windows-latest
+
+    needs: lint
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Setting up python ${{ matrix.python-versions }}
+        uses: actions/setup-python@v2
+        with:
+          python-version: ${{ matrix.python-versions }}
+          architecture: x64
+
+      - name: Creating a virtualenv python ${{ matrix.python-versions }}
+        run: python -m pip install tox
+
+      - name: tox
+        run: tox
+        env:
+          TOXENV: ${{ matrix.toxenv }}
+          COVERALLS_REPO_TOKEN: ${{ secrets.COVERALLS_REPO_TOKEN }}

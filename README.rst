@@ -93,6 +93,119 @@ The ``async_open`` helper creates file like object with file-like methods:
     loop = asyncio.get_event_loop()
     loop.run_until_complete(main())
 
+
+Concatenate example program (``cat``):
+
+.. code-block:: python
+
+    import asyncio
+    import sys
+    from argparse import ArgumentParser
+    from pathlib import Path
+
+    from aiofile import async_open
+
+    parser = ArgumentParser(
+        description="Read file line by line using asynchronous io API"
+    )
+    parser.add_argument("file_name", nargs="+", type=Path)
+
+    async def main(arguments):
+        for src in arguments.file_name:
+            async with async_open(src, "r") as afp:
+                async for line in afp:
+                    sys.stdout.write(line)
+
+
+    asyncio.run(main(parser.parse_args()))
+
+
+Copy file example program (``cp``):
+
+.. code-block:: python
+
+    import asyncio
+    from argparse import ArgumentParser
+    from pathlib import Path
+
+    from aiofile import async_open
+
+    parser = ArgumentParser(
+        description="Copying files using asynchronous io API"
+    )
+    parser.add_argument("source", type=Path)
+    parser.add_argument("dest", type=Path)
+    parser.add_argument("--chunk-size", type=int, default=65535)
+
+
+    async def main(arguments):
+        async with async_open(arguments.source, "rb") as src, \
+                   async_open(arguments.dest, "wb") as dest:
+            async for chunk in src.iter_chunked(arguments.chunk_size):
+                await dest.write(chunk)
+
+
+    asyncio.run(main(parser.parse_args()))
+
+
+
+Example with opening already opened file pointer:
+
+.. code-block:: python
+
+    import asyncio
+    from typing import IO, Any
+    from aiofile import async_open
+
+
+    async def main(fp: IO[Any]):
+        async with async_open(fp) as afp:
+            await afp.write("Hello from\nasync world")
+            print(await afp.readline())
+
+
+    with open("test.txt", "w+") as fp:
+        loop = asyncio.get_event_loop()
+        loop.run_until_complete(main(fp))
+
+Linux native aio doesn't support reading and writing special files
+(e.g. procfs/sysfs/unix pipes/etc.) so you can perform operations with
+this files using compatible context object.
+
+.. code-block:: python
+
+    import asyncio
+    from aiofile import async_open
+    from caio import thread_aio_asyncio
+    from contextlib import AsyncExitStack
+
+
+    async def main():
+        async with AsyncExitStack() as stack:
+
+            # Custom context should be reused
+            ctx = await stack.enter_async_context(
+                thread_aio_asyncio.AsyncioContext()
+            )
+
+            # Open special file with custom context
+            src = await stack.enter_async_context(
+                async_open("/proc/cpuinfo", "r", context=ctx)
+            )
+
+            # Open regular file with default context
+            dest = await stack.enter_async_context(
+                async_open("/tmp/cpuinfo", "w")
+            )
+
+            # Copying file content line by line
+            async for line in src:
+                await dest.write(line)
+
+
+    asyncio.run(main())
+
+
 Supported methods:
 
 * ``async def read(length = -1)`` - reading chunk from file, when length is
