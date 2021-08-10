@@ -5,7 +5,7 @@ from concurrent.futures import Executor
 from functools import partial
 from os import strerror
 from pathlib import Path
-from typing import Any, Coroutine, Optional, Union
+from typing import Any, Coroutine, Optional, Union, IO
 from weakref import finalize
 
 import caio
@@ -114,28 +114,35 @@ class AIOFile:
         context: Optional[AsyncioContextBase] = None,
         executor: Optional[Executor] = None,
     ):
-
         self.__context = context or get_default_context()
 
-        self.__fname = str(filename)
-        self.__open_mode = mode
+        self._fname = str(filename)
+        self._open_mode = mode
 
         self.mode = parse_mode(mode)
 
-        self.__file_obj = None
-        self.__encoding = encoding
-        self.__executor = executor
+        self._file_obj = None
+        self._file_obj_owner = True
+        self._encoding = encoding
+        self._executor = executor
+
+    @classmethod
+    def from_fp(cls, fp: IO[Any] = None, **kwargs):
+        afp = cls(fp.name, fp.mode, **kwargs)
+        afp._file_obj = fp
+        afp._file_obj_owner = False
+        return afp
 
     def _run_in_thread(
             self, func, *args, **kwargs
     ) -> Coroutine[Any, Any, Any]:
         return self.__context.loop.run_in_executor(
-            self.__executor, partial(func, *args, **kwargs),
+            self._executor, partial(func, *args, **kwargs),
         )
 
     @property
     def name(self):
-        return self.__fname
+        return self._fname
 
     @property
     def loop(self):
@@ -143,37 +150,37 @@ class AIOFile:
 
     @property
     def encoding(self):
-        return self.__encoding
+        return self._encoding
 
     async def open(self):
-        if self.__file_obj is not None:
+        if self._file_obj is not None:
             return
 
-        if self.__file_obj and self.__file_obj.closed:
+        if self._file_obj and self._file_obj.closed:
             raise asyncio.InvalidStateError("AIOFile closed")
 
-        self.__file_obj = await self._run_in_thread(
-            open, self.__fname, self.__open_mode,
+        self._file_obj = await self._run_in_thread(
+            open, self._fname, self._open_mode,
         )
 
         return self.fileno()
 
     def __repr__(self):
-        return "<AIOFile: %r>" % self.__fname
+        return "<AIOFile: %r>" % self._fname
 
     async def close(self):
-        if self.__file_obj is None:
+        if self._file_obj is None or not self._file_obj_owner:
             return
 
         if self.mode.writable:
             await self.fsync()
 
-        await self._run_in_thread(self.__file_obj.close)
+        await self._run_in_thread(self._file_obj.close)
 
     def fileno(self) -> int:
-        if self.__file_obj is None:
+        if self._file_obj is None:
             raise asyncio.InvalidStateError("AIOFile closed")
-        return self.__file_obj.fileno()
+        return self._file_obj.fileno()
 
     def __await__(self):
         yield from self.open().__await__()
@@ -217,10 +224,10 @@ class AIOFile:
         return await self.write_bytes(bytes_data, offset)
 
     def encode_bytes(self, data: str) -> bytes:
-        return data.encode(self.__encoding)
+        return data.encode(self._encoding)
 
     def decode_bytes(self, data: bytes) -> str:
-        return data.decode(self.__encoding)
+        return data.decode(self._encoding)
 
     async def write_bytes(self, data: bytes, offset: int = 0):
         data_size = len(data)
@@ -254,7 +261,7 @@ class AIOFile:
                 # (https://github.com/mosquito/caio/pull/7)
                 # and safeguard from future similar issues
                 errno = -res
-                raise OSError(errno, strerror(errno), self.__fname)
+                raise OSError(errno, strerror(errno), self._fname)
 
             written += res
 

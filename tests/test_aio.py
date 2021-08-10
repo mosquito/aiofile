@@ -492,3 +492,22 @@ async def test_async_open_readline(aio_file_maker, temp_file):
             assert await afp.readline() == fp.readline()
             assert await afp.readline() == fp.readline()
             assert await afp.readline() == fp.readline()
+
+
+async def test_async_open_fp(aio_file_maker, tmp_path: Path):
+    data = "Hello\nworld\n"
+
+    with open(tmp_path / "file.txt", "w+") as fp:
+        async with async_open(fp) as afp:
+            await afp.write(data)
+            afp.seek(0)
+            assert await afp.read() == data
+            assert not afp.file.mode.binary
+
+        assert not fp.closed
+
+    with open(tmp_path / "file.txt", "rb") as fp:
+        async with async_open(fp) as afp:
+            assert afp.file.mode.binary
+
+        assert fp.read().decode() == data

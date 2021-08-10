@@ -311,9 +311,15 @@ class TextFileWrapper(FileIOWrapperBase):
 
 
 def async_open(
-    file_name: typing.Union[str, Path], mode: str, *args, **kwargs
+    file_name: typing.Union[str, Path, typing.IO[typing.Any]],
+    mode: str = "r", *args, **kwargs
 ) -> typing.Union[BinaryFileWrapper, TextFileWrapper]:
-    afp = AIOFile(str(file_name), mode, *args, **kwargs)
+    if isinstance(file_name, (str, Path)):
+        afp = AIOFile(str(file_name), mode, *args, **kwargs)
+    else:
+        if args:
+            raise ValueError("Arguments denied when IO[Any] opening.")
+        afp = AIOFile.from_fp(file_name, **kwargs)
 
     if not afp.mode.binary:
         return TextFileWrapper(afp)
@@ -328,5 +334,6 @@ __all__ = (
     "Reader",
     "TextFileWrapper",
     "Writer",
+    "async_open",
     "unicode_reader",
 )
