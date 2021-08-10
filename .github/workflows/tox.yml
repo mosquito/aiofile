@@ -38,7 +38,39 @@ jobs:
         env:
           TOXENV: ${{ matrix.linter }}
 
-  tests:
+  tests-macos:
+    needs: lint
+    runs-on: macos-latest
+
+    strategy:
+      fail-fast: false
+
+      matrix:
+        python-versions:
+          - 3.6
+          - 3.7
+          - 3.8
+          - 3.9
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Setting up python ${{ matrix.python-versions }}
+        uses: actions/setup-python@v2
+        with:
+          python-version: ${{ matrix.python-versions }}
+          architecture: x64
+
+      - name: Installing tox
+        run: python -m pip install tox
+
+      - name: tox ${{ matrix.toxenv }}
+        run: tox
+        env:
+          TOXENV: ${{ matrix.toxenv }}
+          COVERALLS_REPO_TOKEN: ${{ secrets.COVERALLS_REPO_TOKEN }}
+
+  tests-linux:
     needs: lint
     runs-on: ubuntu-latest
 
@@ -79,6 +111,7 @@ jobs:
           - 3.6
           - 3.7
           - 3.8
+          - 3.9
 
     needs: lint
     runs-on: windows-latest
