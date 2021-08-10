@@ -7,8 +7,7 @@ from collections.abc import AsyncIterable
 from pathlib import Path
 from types import MappingProxyType
 
-from .aio import AIOFile
-
+from .aio import AIOFile, FileIOType
 
 ENCODING_MAP = MappingProxyType({
     "utf-8": 4,
@@ -311,15 +310,15 @@ class TextFileWrapper(FileIOWrapperBase):
 
 
 def async_open(
-    file_name: typing.Union[str, Path, typing.IO[typing.Any]],
+    file_specifier: typing.Union[str, Path, FileIOType],
     mode: str = "r", *args, **kwargs
 ) -> typing.Union[BinaryFileWrapper, TextFileWrapper]:
-    if isinstance(file_name, (str, Path)):
-        afp = AIOFile(str(file_name), mode, *args, **kwargs)
+    if isinstance(file_specifier, (str, Path)):
+        afp = AIOFile(str(file_specifier), mode, *args, **kwargs)
     else:
         if args:
             raise ValueError("Arguments denied when IO[Any] opening.")
-        afp = AIOFile.from_fp(file_name, **kwargs)
+        afp = AIOFile.from_fp(file_specifier, **kwargs)
 
     if not afp.mode.binary:
         return TextFileWrapper(afp)

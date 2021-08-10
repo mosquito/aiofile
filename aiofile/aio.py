@@ -5,7 +5,7 @@ from concurrent.futures import Executor
 from functools import partial
 from os import strerror
 from pathlib import Path
-from typing import Any, Coroutine, Optional, Union, IO
+from typing import Any, Coroutine, Optional, Union, IO, TextIO, BinaryIO
 from weakref import finalize
 
 import caio
@@ -15,6 +15,7 @@ from caio.asyncio_base import AsyncioContextBase
 AIO_FILE_NOT_OPENED = -1
 AIO_FILE_CLOSED = -2
 
+FileIOType = Union[TextIO, BinaryIO]
 
 FileMode = namedtuple(
     "FileMode", (
@@ -108,6 +109,12 @@ def parse_mode(mode: str) -> FileMode:
 
 
 class AIOFile:
+    _file_obj: Optional[FileIOType]
+    _file_obj_owner: bool
+    _encoding: str
+    _executor: Optional[Executor]
+    mode: FileMode
+
     def __init__(
         self, filename: Union[str, Path],
         mode: str = "r", encoding: str = "utf-8",
@@ -127,9 +134,10 @@ class AIOFile:
         self._executor = executor
 
     @classmethod
-    def from_fp(cls, fp: IO[Any] = None, **kwargs):
+    def from_fp(cls, fp: FileIOType, **kwargs):
         afp = cls(fp.name, fp.mode, **kwargs)
         afp._file_obj = fp
+        afp._open_mode = fp.mode
         afp._file_obj_owner = False
         return afp
 
