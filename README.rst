@@ -70,7 +70,29 @@ High-level API
 ``async_open`` helper
 ~~~~~~~~~~~~~~~~~~~~~
 
-The ``async_open`` helper creates file like object with file-like methods:
+Helper mimics to python python file-like objects, it's returns file like
+object with similar but async methods.
+
+Supported methods:
+
+* ``async def read(length = -1)`` - reading chunk from file, when length is
+  ``-1`` will be read file to the end.
+* ``async def write(data)`` - write chunk to file
+* ``def seek(offset)`` - set file pointer position
+* ``def tell()`` - returns current file pointer position
+* ``async def readline(size=-1, newline="\n")`` - read chunks until
+  newline or EOF. Since version 3.7.0 ``__aiter__`` returns ``LineReader``.
+
+  This method suboptimal for small lines because doesn't reuse read buffer.
+  When you want to read file by lines please avoid to use ``async_open``
+  use ``LineReader`` instead.
+* ``def __aiter__() -> LineReader`` - iterator over lines.
+* ``def iter_chunked(chunk_size: int = 32768) -> Reader`` - iterator over
+  chunks.
+* ``.file`` property contains AIOFile object
+
+
+Basic example:
 
 .. code-block:: python
 
@@ -106,7 +128,7 @@ Concatenate example program (``cat``):
     from aiofile import async_open
 
     parser = ArgumentParser(
-        description="Read file line by line using asynchronous io API"
+        description="Read files line by line using asynchronous io API"
     )
     parser.add_argument("file_name", nargs="+", type=Path)
 
@@ -146,7 +168,6 @@ Copy file example program (``cp``):
 
 
     asyncio.run(main(parser.parse_args()))
-
 
 
 Example with opening already opened file pointer:
@@ -204,20 +225,6 @@ this files using compatible context object.
 
 
     asyncio.run(main())
-
-
-Supported methods:
-
-* ``async def read(length = -1)`` - reading chunk from file, when length is
-  ``-1`` will be read file to the end.
-* ``async def write(data)`` - write chunk to file
-* ``def seek(offset)`` - set file pointer position
-* ``def tell()`` - returns current file pointer position
-* ``async def readline(size=-1, newline="\n")`` - read chunks until
-  newline or EOF.
-  Suboptimal for small lines because doesn't reuse read buffer.
-  When you want to read file by lines please avoid to use ``async_open``
-  use ``LineReader`` instead.
 
 
 ``Reader`` and ``Writer``
