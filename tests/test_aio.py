@@ -69,9 +69,10 @@ async def test_read_write_pathlib(aio_file_maker, temp_file, uuid):
     assert data == uuid
 
 
-async def test_read_offset(aio_file_maker, temp_file, uuid):
+@pytest.mark.parametrize("count", [2, 3, 5, 10, 20, 100])
+async def test_read_offset(count, aio_file_maker, temp_file, uuid):
     with open(temp_file, "w") as f:
-        for _ in range(10):
+        for _ in range(count):
             f.write(uuid)
 
     aio_file = await aio_file_maker(temp_file, "r")
@@ -84,11 +85,12 @@ async def test_read_offset(aio_file_maker, temp_file, uuid):
     assert data == uuid
 
 
-async def test_read_write_offset(aio_file_maker, temp_file, uuid):
+@pytest.mark.parametrize("count", [2, 3, 5, 10, 20, 100])
+async def test_read_write_offset(count, aio_file_maker, temp_file, uuid):
     r_file = await aio_file_maker(temp_file, "r")
     w_file = await aio_file_maker(temp_file, "w")
 
-    for i in range(10):
+    for i in range(count):
         await w_file.write(uuid, offset=i * len(uuid))
 
     await w_file.fsync()
@@ -101,12 +103,12 @@ async def test_read_write_offset(aio_file_maker, temp_file, uuid):
     assert data == uuid
 
 
-async def test_reader_writer(aio_file_maker, temp_file, uuid):
+@pytest.mark.parametrize("count", [1, 2, 3, 5, 10, 20, 100])
+async def test_reader_writer(count, aio_file_maker, temp_file, uuid):
     r_file = await aio_file_maker(temp_file, "rb")
     w_file = await aio_file_maker(temp_file, "wb")
 
     chunk_size = 16
-    count = 10
     payload = os.urandom(chunk_size * count)
     writer = Writer(w_file)
 
@@ -124,13 +126,14 @@ async def test_reader_writer(aio_file_maker, temp_file, uuid):
     assert not buff.read()
 
 
-async def test_reader_writer2(aio_file_maker, temp_file, uuid):
+@pytest.mark.parametrize("count", [1, 2, 3, 5, 10, 20, 100, 1000])
+async def test_reader_writer2(count, aio_file_maker, temp_file, uuid):
     r_file = await aio_file_maker(temp_file, "r")
     w_file = await aio_file_maker(temp_file, "w")
 
     writer = Writer(w_file)
 
-    for _ in range(100):
+    for _ in range(count):
         await writer(uuid)
 
     await w_file.fsync()
@@ -161,11 +164,11 @@ async def test_parallel_writer(aio_file_maker, temp_file, uuid):
     assert count == 1000
 
 
-async def test_parallel_writer_ordering(aio_file_maker, temp_file, uuid):
+@pytest.mark.parametrize("count", [1, 2, 3, 5, 10, 20, 100, 1000])
+async def test_parallel_writer_ordering(count, aio_file_maker, temp_file, uuid):
     w_file = await aio_file_maker(temp_file, "wb")
     r_file = await aio_file_maker(temp_file, "rb")
 
-    count = 1000
     chunk_size = 1024
 
     data = os.urandom(chunk_size * count)
@@ -219,12 +222,13 @@ async def test_line_reader(aio_file_maker, temp_file, uuid):
     assert hash_data(read_lines) == hash_data(lines)
 
 
-async def test_line_reader_one_line(aio_file_maker, temp_file):
+@pytest.mark.parametrize("size", [1, 2, 3, 5, 10, 20, 100, 1000, 2000, 5000])
+async def test_line_reader_one_line(size, aio_file_maker, temp_file):
     afp = await aio_file_maker(temp_file, "w+")
 
     writer = Writer(afp)
 
-    payload = " ".join(uuid4().hex for _ in range(1000))
+    payload = " ".join(uuid4().hex for _ in range(size))
 
     await writer(payload)
 
@@ -249,7 +253,8 @@ async def test_truncate(aio_file_maker, temp_file):
     assert (await afp.read()) == ""
 
 
-async def test_modes(aio_file_maker, tmpdir):
+@pytest.mark.parametrize("size", [1, 2, 3, 5, 10, 20, 100, 1000, 2000, 5000])
+async def test_modes(size, aio_file_maker, tmpdir):
     tmpfile = tmpdir.join("test.txt")
 
     async with aio_file_maker(tmpfile, "w") as afp:
@@ -265,7 +270,7 @@ async def test_modes(aio_file_maker, tmpdir):
     async with aio_file_maker(tmpfile, "r+") as afp:
         assert await afp.read() == "foo"
 
-    data = dict((str(i), i)for i in range(1000))
+    data = dict((str(i), i)for i in range(size))
 
     tmpfile = tmpdir.join("test.json")
     async with aio_file_maker(tmpfile, "w") as afp:
@@ -513,38 +518,40 @@ async def test_async_open_fp(aio_file_maker, tmp_path: Path):
         assert fp.read().decode() == data
 
 
-async def test_async_open_line_iter(aio_file_maker, tmp_path: Path):
+@pytest.mark.parametrize("sizes", [[1, 2], [2, 10], [10, 20], [100, 500]])
+async def test_async_open_line_iter(sizes, aio_file_maker, tmp_path: Path):
     async with async_open(tmp_path / "file.txt", "w+") as afp:
-        for i in range(100, 500):
+        for i in range(*sizes):
             await afp.write(str(i))
             await afp.write('\n')
 
         afp.seek(0)
-        idx = 100
+        idx = sizes[0]
         async for line in afp:
             assert line.endswith("\n")
             assert int(line.strip()) == idx
             idx += 1
 
     async with async_open(tmp_path / "file.bin", "wb+") as afp:
-        for i in range(100, 500):
+        for i in range(*sizes):
             await afp.write(str(i).encode())
             await afp.write(b'\n')
 
         afp.seek(0)
-        idx = 100
+        idx = sizes[0]
         async for line in afp:
             assert line.endswith(b'\n')
             assert int(line.decode().strip()) == idx
             idx += 1
 
 
-async def test_async_open_iter_chunked(aio_file_maker, tmp_path: Path):
+@pytest.mark.parametrize("size", [1, 2, 3, 5, 10, 20, 100, 1000, 2000, 5000])
+async def test_async_open_iter_chunked(size, aio_file_maker, tmp_path: Path):
     src_path = tmp_path / "src.txt"
     dst_path = tmp_path / "dst.txt"
 
     async with async_open(src_path, "w") as afp:
-        for i in range(0, 5000):
+        for i in range(0, size):
             await afp.write(str(i))
             await afp.write('\n')
 

@@ -9,6 +9,7 @@ from typing import Any, Tuple, Union
 
 from .aio import AIOFile, FileIOType
 
+
 ENCODING_MAP = MappingProxyType({
     "utf-8": 4,
     "utf-16": 8,
@@ -18,7 +19,7 @@ ENCODING_MAP = MappingProxyType({
 
 
 async def unicode_reader(
-    afp: AIOFile, chunk_size: int, offset: int, encoding: str = "utf-8"
+    afp: AIOFile, chunk_size: int, offset: int, encoding: str = "utf-8",
 ) -> Tuple[int, str]:
 
     if chunk_size < 0:
@@ -175,7 +176,7 @@ class FileIOWrapperBase(ABC):
 
     @abstractmethod
     async def readline(
-        self, size: int = -1, newline: Any = ...
+        self, size: int = -1, newline: Any = ...,
     ) -> Union[str, bytes]:
         raise NotImplementedError
 
@@ -313,7 +314,8 @@ class TextFileWrapper(FileIOWrapperBase):
                     fp.seek(0)
                     line = fp.readline()
                     self._offset = offset + len(
-                        line.encode(encoding=self.encoding))
+                        line.encode(encoding=self.encoding),
+                    )
                     return line
 
 

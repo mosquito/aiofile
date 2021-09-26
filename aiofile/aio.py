@@ -5,7 +5,7 @@ from concurrent.futures import Executor
 from functools import partial
 from os import strerror
 from pathlib import Path
-from typing import Any, Coroutine, Optional, Union, TextIO, BinaryIO
+from typing import Any, BinaryIO, Coroutine, Optional, TextIO, Union
 from weakref import finalize
 
 import caio
@@ -288,11 +288,16 @@ DEFAULT_CONTEXT_STORE = {}
 
 
 def create_context(
-        max_requests=caio.AsyncioContext.MAX_REQUESTS_DEFAULT,
+    max_requests=caio.AsyncioContext.MAX_REQUESTS_DEFAULT,
 ) -> caio.AsyncioContext:
     loop = asyncio.get_event_loop()
     context = caio.AsyncioContext(max_requests, loop=loop)
-    finalize(loop, lambda *_: context.close())
+
+    def finalizer(*_):
+        context.close()
+        DEFAULT_CONTEXT_STORE.pop(context, None)
+
+    finalize(loop, finalizer)
     DEFAULT_CONTEXT_STORE[loop] = context
     return context
 
