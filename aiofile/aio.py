@@ -6,8 +6,8 @@ from functools import partial
 from os import strerror
 from pathlib import Path
 from typing import (
-    Any, Awaitable, BinaryIO, Callable, Dict, Optional, TextIO, Union,
-    Generator,
+    Any, Awaitable, BinaryIO, Callable, Dict, Generator, Optional, TextIO,
+    Union,
 )
 from weakref import finalize
 
