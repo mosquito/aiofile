@@ -98,11 +98,15 @@ Basic example:
     :name: test_basic
 
     import asyncio
+    from pathlib import Path
+    from tempfile import gettempdir
+
     from aiofile import async_open
 
+    tmp_filename = Path(gettempdir()) / "hello.txt"
 
     async def main():
-        async with async_open("/tmp/hello.txt", 'w+') as afp:
+        async with async_open(tmp_filename, 'w+') as afp:
             await afp.write("Hello ")
             await afp.write("world")
             afp.seek(0)
