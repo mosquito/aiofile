@@ -74,7 +74,7 @@ class Reader(collections.abc.AsyncIterable):
         self.__offset += chunk_size
         return chunk
 
-    async def __anext__(self):
+    async def __anext__(self) -> Union[str, bytes]:
         chunk = await self.read_chunk()
 
         if not chunk:
@@ -82,7 +82,7 @@ class Reader(collections.abc.AsyncIterable):
 
         return chunk
 
-    def __aiter__(self):
+    def __aiter__(self) -> "Reader":
         return self
 
 
@@ -94,7 +94,7 @@ class Writer:
         self.__aio_file = aio_file
         self.__lock = asyncio.Lock()
 
-    async def __call__(self, data):
+    async def __call__(self, data: Union[str, bytes]) -> None:
         async with self.__lock:
             if isinstance(data, str):
                 data = self.__aio_file.encode_bytes(data)
@@ -180,20 +180,20 @@ class FileIOWrapperBase(ABC):
     ) -> Union[str, bytes]:
         raise NotImplementedError
 
-    def seek(self, offset: int):
+    def seek(self, offset: int) -> None:
         self._offset = offset
 
     def tell(self) -> int:
         return self._offset
 
-    async def close(self):
+    async def close(self) -> None:
         await self.file.close()
 
-    async def __aenter__(self):
+    async def __aenter__(self) -> "FileIOWrapperBase":
         await self.file.open()
         return self
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
+    async def __aexit__(self, *_: Any) -> None:
         await self.close()
 
     def __aiter__(self) -> LineReader:
@@ -233,7 +233,7 @@ class BinaryFileWrapper(FileIOWrapperBase):
                     chunk = await self.__read(self._READLINE_CHUNK_SIZE)
 
                     if chunk:
-                        if newline not in chunk:  # type: ignore
+                        if newline not in chunk:
                             fp.write(chunk)
                             continue
 
@@ -300,7 +300,7 @@ class TextFileWrapper(FileIOWrapperBase):
                     chunk = await self.__read(self._READLINE_CHUNK_SIZE)
 
                     if chunk:
-                        if newline not in chunk:  # type: ignore
+                        if newline not in chunk:
                             fp.write(chunk)
                             continue
 
@@ -321,7 +321,7 @@ class TextFileWrapper(FileIOWrapperBase):
 
 def async_open(
     file_specifier: Union[str, Path, FileIOType],
-    mode: str = "r", *args, **kwargs
+    mode: str = "r", *args: Any, **kwargs: Any
 ) -> Union[BinaryFileWrapper, TextFileWrapper]:
     if isinstance(file_specifier, (str, Path)):
         afp = AIOFile(str(file_specifier), mode, *args, **kwargs)

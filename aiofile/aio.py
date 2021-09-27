@@ -5,7 +5,10 @@ from concurrent.futures import Executor
 from functools import partial
 from os import strerror
 from pathlib import Path
-from typing import Any, BinaryIO, Coroutine, Optional, TextIO, Union
+from typing import (
+    Any, Awaitable, BinaryIO, Callable, Dict, Optional, TextIO, Union,
+    Generator,
+)
 from weakref import finalize
 
 import caio
@@ -134,7 +137,7 @@ class AIOFile:
         self._executor = executor
 
     @classmethod
-    def from_fp(cls, fp: FileIOType, **kwargs):
+    def from_fp(cls, fp: FileIOType, **kwargs: Any) -> "AIOFile":
         afp = cls(fp.name, fp.mode, **kwargs)
         afp._file_obj = fp
         afp._open_mode = fp.mode
@@ -142,27 +145,27 @@ class AIOFile:
         return afp
 
     def _run_in_thread(
-            self, func, *args, **kwargs
-    ) -> Coroutine[Any, Any, Any]:
+            self, func: Callable, *args: Any, **kwargs: Any
+    ) -> Awaitable[Any]:
         return self.__context.loop.run_in_executor(
             self._executor, partial(func, *args, **kwargs),
         )
 
     @property
-    def name(self):
+    def name(self) -> str:
         return self._fname
 
     @property
-    def loop(self):
+    def loop(self) -> asyncio.AbstractEventLoop:
         return self.__context.loop
 
     @property
-    def encoding(self):
+    def encoding(self) -> str:
         return self._encoding
 
-    async def open(self):
+    async def open(self) -> Optional[int]:
         if self._file_obj is not None:
-            return
+            return None
 
         if self._file_obj and self._file_obj.closed:
             raise asyncio.InvalidStateError("AIOFile closed")
@@ -173,10 +176,10 @@ class AIOFile:
 
         return self.fileno()
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return "<AIOFile: %r>" % self._fname
 
-    async def close(self):
+    async def close(self) -> None:
         if self._file_obj is None or not self._file_obj_owner:
             return
 
@@ -190,16 +193,16 @@ class AIOFile:
             raise asyncio.InvalidStateError("AIOFile closed")
         return self._file_obj.fileno()
 
-    def __await__(self):
+    def __await__(self) -> Generator[None, Any, "AIOFile"]:
         yield from self.open().__await__()
         return self
 
-    async def __aenter__(self):
+    async def __aenter__(self) -> "AIOFile":
         await self.open()
         return self
 
-    def __aexit__(self, *args):
-        return asyncio.get_event_loop().create_task(self.close())
+    def __aexit__(self, *args: Any) -> None:
+        asyncio.get_event_loop().create_task(self.close())
 
     async def read(self, size: int = -1, offset: int = 0) -> Union[bytes, str]:
         data = await self.read_bytes(size, offset)
@@ -219,7 +222,7 @@ class AIOFile:
 
         return await self.__context.read(size, self.fileno(), offset)
 
-    async def write(self, data: Union[str, bytes], offset: int = 0):
+    async def write(self, data: Union[str, bytes], offset: int = 0) -> int:
         if self.mode.binary:
             if not isinstance(data, bytes):
                 raise ValueError("Data must be bytes in binary mode")
@@ -237,7 +240,7 @@ class AIOFile:
     def decode_bytes(self, data: bytes) -> str:
         return data.decode(self._encoding)
 
-    async def write_bytes(self, data: bytes, offset: int = 0):
+    async def write_bytes(self, data: bytes, offset: int = 0) -> int:
         data_size = len(data)
         if data_size == 0:
             return 0
@@ -275,25 +278,26 @@ class AIOFile:
 
         return written
 
-    async def fsync(self):
+    async def fsync(self) -> None:
         return await self.__context.fdsync(self.fileno())
 
-    def truncate(self, length: int = 0):
+    def truncate(self, length: int = 0) -> Awaitable[None]:
         return self._run_in_thread(
             os.ftruncate, self.fileno(), length,
         )
 
 
-DEFAULT_CONTEXT_STORE = {}
+ContextStoreType = Dict[asyncio.AbstractEventLoop, caio.AsyncioContext]
+DEFAULT_CONTEXT_STORE: ContextStoreType = {}
 
 
 def create_context(
-    max_requests=caio.AsyncioContext.MAX_REQUESTS_DEFAULT,
+    max_requests: int = caio.AsyncioContext.MAX_REQUESTS_DEFAULT,
 ) -> caio.AsyncioContext:
     loop = asyncio.get_event_loop()
     context = caio.AsyncioContext(max_requests, loop=loop)
 
-    def finalizer(*_):
+    def finalizer() -> None:
         context.close()
         DEFAULT_CONTEXT_STORE.pop(context, None)
 

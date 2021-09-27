@@ -1,9 +1,9 @@
 from functools import partial
 
 import pytest
+from caio import python_aio_asyncio
 
 from aiofile import AIOFile
-from caio import python_aio_asyncio
 
 
 try:
