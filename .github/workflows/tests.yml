@@ -20,6 +20,7 @@ jobs:
           - lint
           - checkdoc
           - mypy
+          - readme
 
     steps:
       - uses: actions/checkout@v2
