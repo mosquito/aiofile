@@ -20,7 +20,6 @@ jobs:
           - lint
           - checkdoc
           - mypy
-          - readme
 
     steps:
       - uses: actions/checkout@v2
@@ -81,6 +80,15 @@ jobs:
           - python-versions: 3.9
             toxenv: py39
             os: windows-latest
+          - python-versions: 3.9
+            toxenv: readme
+            os: windows-latest
+          - python-versions: 3.9
+            toxenv: readme
+            os: macos-latest
+          - python-versions: 3.9
+            toxenv: readme
+            os: ubuntu-latest
 
     needs: lint
     runs-on: ${{ matrix.os }}
