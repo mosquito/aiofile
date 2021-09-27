@@ -201,8 +201,8 @@ class AIOFile:
         await self.open()
         return self
 
-    def __aexit__(self, *args: Any) -> None:
-        asyncio.get_event_loop().create_task(self.close())
+    def __aexit__(self, *args: Any) -> Awaitable[Any]:
+        return asyncio.get_event_loop().create_task(self.close())
 
     async def read(self, size: int = -1, offset: int = 0) -> Union[bytes, str]:
         data = await self.read_bytes(size, offset)
