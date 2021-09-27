@@ -3,7 +3,7 @@ from functools import partial
 import pytest
 from caio import python_aio_asyncio
 
-from aiofile import AIOFile
+from aiofile import AIOFile, async_open
 
 
 try:
@@ -48,3 +48,8 @@ async def aio_context(request, loop):
 @pytest.fixture
 def aio_file_maker(aio_context):
     return partial(AIOFile, context=aio_context)
+
+
+@pytest.fixture(name="async_open")
+def async_open_maker(aio_context):
+    return partial(async_open, context=aio_context)

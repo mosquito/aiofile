@@ -14,7 +14,7 @@ import pytest
 
 from aiofile import AIOFile
 from aiofile.utils import (
-    BinaryFileWrapper, LineReader, Reader, TextFileWrapper, Writer, async_open,
+    BinaryFileWrapper, LineReader, Reader, TextFileWrapper, Writer,
 )
 
 from .impl import split_by
@@ -429,8 +429,8 @@ async def test_binary_io_wrapper(aio_file_maker, temp_file):
         assert fp.tell() == 1
 
 
-async def test_async_open(aio_file_maker, temp_file):
-    async with aio_file_maker(temp_file, "wb+") as afp:
+async def test_async_open(async_open, temp_file):
+    async with async_open(temp_file, "wb+") as afp:
         data = b"\x01\x02\x03" + "🦠📱".encode()
         await afp.write(data * 32)
 
@@ -449,7 +449,7 @@ async def test_async_open(aio_file_maker, temp_file):
         assert await fp.read(2) == "🦠📱"
 
 
-async def test_async_open_unicode(aio_file_maker, temp_file):
+async def test_async_open_unicode(aio_file_maker, async_open, temp_file):
     async with aio_file_maker(temp_file, "w+") as afp:
         data = "🏁💾🏴‍☠️"
         await afp.write(data)
@@ -474,7 +474,7 @@ async def test_async_open_unicode(aio_file_maker, temp_file):
             assert afp.tell() == fp.tell()
 
 
-async def test_async_open_readline(aio_file_maker, temp_file):
+async def test_async_open_readline(aio_file_maker, async_open, temp_file):
     async with aio_file_maker(temp_file, "w+") as afp:
         data = "Hello\nworld\n" + ("h" * 10000)
         await afp.write(data)
@@ -501,7 +501,7 @@ async def test_async_open_readline(aio_file_maker, temp_file):
             assert await afp.readline() == fp.readline()
 
 
-async def test_async_open_fp(aio_file_maker, tmp_path: Path):
+async def test_async_open_fp(async_open, tmp_path: Path):
     data = "Hello\nworld\n"
 
     with open(tmp_path / "file.txt", "w+") as fp:
@@ -521,7 +521,7 @@ async def test_async_open_fp(aio_file_maker, tmp_path: Path):
 
 
 @pytest.mark.parametrize("sizes", [[1, 2], [2, 10], [10, 20], [100, 500]])
-async def test_async_open_line_iter(sizes, aio_file_maker, tmp_path: Path):
+async def test_async_open_line_iter(sizes, async_open, tmp_path: Path):
     async with async_open(tmp_path / "file.txt", "w+") as afp:
         for i in range(*sizes):
             await afp.write(str(i))
@@ -548,7 +548,7 @@ async def test_async_open_line_iter(sizes, aio_file_maker, tmp_path: Path):
 
 
 @pytest.mark.parametrize("size", [1, 2, 3, 5, 10, 20, 100, 1000, 2000, 5000])
-async def test_async_open_iter_chunked(size, aio_file_maker, tmp_path: Path):
+async def test_async_open_iter_chunked(size, async_open, tmp_path: Path):
     src_path = tmp_path / "src.txt"
     dst_path = tmp_path / "dst.txt"
 
