@@ -95,6 +95,7 @@ Supported methods:
 Basic example:
 
 .. code-block:: python
+    :name: test_basic
 
     import asyncio
     from aiofile import async_open
@@ -173,6 +174,7 @@ Copy file example program (``cp``):
 Example with opening already opened file pointer:
 
 .. code-block:: python
+    :name: test_opened
 
     import asyncio
     from typing import IO, Any
