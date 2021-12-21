@@ -15,6 +15,7 @@ setup(
     name="aiofile",
     version=module.__version__,
     packages=["aiofile"],
+    include_package_data=True,
     license=module.package_license,
     description=module.package_info,
     long_description=open("README.rst").read(),
