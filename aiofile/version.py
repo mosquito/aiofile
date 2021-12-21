@@ -9,7 +9,7 @@ package_license = "Apache 2"
 
 team_email = "me@mosquito.su"
 
-version_info = (3, 7, 3)
+version_info = (3, 7, 4)
 
 __author__ = ", ".join("{} <{}>".format(*info) for info in author_info)
 __version__ = ".".join(map(str, version_info))
