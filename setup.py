@@ -49,7 +49,7 @@ setup(
         "Topic :: System",
         "Topic :: System :: Operating System",
     ],
-    python_requires=">3.4.*, <4",
+    python_requires=">3.4, <4",
     extras_require={
         "develop": [
             "aiomisc",
