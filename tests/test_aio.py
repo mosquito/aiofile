@@ -199,6 +199,18 @@ async def test_non_existent_file_ctx(aio_file_maker):
             pass
 
 
+async def test_sequential_open(aio_file_maker, temp_file):
+    file = aio_file_maker(temp_file, "r")
+    try:
+        assert isinstance(await file.open(), int)
+        assert await file.open() is None
+    finally:
+        await file.close()
+
+    with pytest.raises(asyncio.InvalidStateError):
+        await file.open()
+
+
 async def test_line_reader(aio_file_maker, temp_file, uuid):
     afp = await aio_file_maker(temp_file, "w+")
 

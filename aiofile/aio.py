@@ -165,10 +165,9 @@ class AIOFile:
 
     async def open(self) -> Optional[int]:
         if self._file_obj is not None:
+            if self._file_obj.closed:
+                raise asyncio.InvalidStateError("AIOFile closed")
             return None
-
-        if self._file_obj and self._file_obj.closed:
-            raise asyncio.InvalidStateError("AIOFile closed")
 
         self._file_obj = await self._run_in_thread(
             open, self._fname, self._open_mode,
