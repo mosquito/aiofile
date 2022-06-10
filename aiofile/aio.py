@@ -7,13 +7,14 @@ from os import strerror
 from pathlib import Path
 from typing import (
     Any, Awaitable, BinaryIO, Callable, Dict, Generator, Optional, TextIO,
-    Union,
+    TypeVar, Union,
 )
 from weakref import finalize
 
 import caio
 from caio.asyncio_base import AsyncioContextBase
 
+_T = TypeVar('_T')
 
 AIO_FILE_NOT_OPENED = -1
 AIO_FILE_CLOSED = -2
@@ -117,7 +118,7 @@ class AIOFile:
     _encoding: str
     _executor: Optional[Executor]
     mode: FileMode
-    __open_lock: Optional[asyncio.Lock]
+    __open_result: "Optional[asyncio.Future[FileIOType]]"
 
     def __init__(
         self, filename: Union[str, Path],
@@ -126,7 +127,7 @@ class AIOFile:
         executor: Optional[Executor] = None,
     ):
         self.__context = context or get_default_context()
-        self.__open_lock = None
+        self.__open_result = None
 
         self._fname = str(filename)
         self._open_mode = mode
@@ -147,8 +148,8 @@ class AIOFile:
         return afp
 
     def _run_in_thread(
-            self, func: Callable, *args: Any, **kwargs: Any
-    ) -> Awaitable[Any]:
+            self, func: "Callable[..., _T]", *args: Any, **kwargs: Any
+    ) -> "asyncio.Future[_T]":
         return self.__context.loop.run_in_executor(
             self._executor, partial(func, *args, **kwargs),
         )
@@ -171,23 +172,18 @@ class AIOFile:
                 raise asyncio.InvalidStateError("AIOFile closed")
             return None
 
-        if self.__open_lock is None:
-            self.__open_lock = asyncio.Lock()
-
-        async with self.__open_lock:
-            # Another caller may have already opened the file while we waited.
-            if self._file_obj is not None:
-                return None
-
-            self._file_obj = await self._run_in_thread(
+        if self.__open_result is None:
+            self.__open_result = self._run_in_thread(
                 open,
                 self._fname,
                 self._open_mode,
             )
+            self._file_obj = await self.__open_result
+            self.__open_result = None
+            return self._file_obj.fileno()
 
-        self.__open_lock = None
-
-        return self.fileno()
+        await self.__open_result
+        return None
 
     def __repr__(self) -> str:
         return "<AIOFile: %r>" % self._fname
