@@ -117,6 +117,7 @@ class AIOFile:
     _encoding: str
     _executor: Optional[Executor]
     mode: FileMode
+    __open_lock: Optional[asyncio.Lock]
 
     def __init__(
         self, filename: Union[str, Path],
@@ -125,6 +126,7 @@ class AIOFile:
         executor: Optional[Executor] = None,
     ):
         self.__context = context or get_default_context()
+        self.__open_lock = None
 
         self._fname = str(filename)
         self._open_mode = mode
@@ -169,9 +171,21 @@ class AIOFile:
                 raise asyncio.InvalidStateError("AIOFile closed")
             return None
 
-        self._file_obj = await self._run_in_thread(
-            open, self._fname, self._open_mode,
-        )
+        if self.__open_lock is None:
+            self.__open_lock = asyncio.Lock()
+
+        async with self.__open_lock:
+            # Another caller may have already opened the file while we waited.
+            if self._file_obj is not None:
+                return None
+
+            self._file_obj = await self._run_in_thread(
+                open,
+                self._fname,
+                self._open_mode,
+            )
+
+        self.__open_lock = None
 
         return self.fileno()
 
