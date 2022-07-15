@@ -5,7 +5,7 @@ import os
 from abc import ABC, abstractmethod
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any, Tuple, Union
+from typing import Any, Tuple, Union, overload, TypeVar, Literal
 
 from .aio import AIOFile, FileIOType
 
@@ -155,6 +155,9 @@ class LineReader(collections.abc.AsyncIterable):
         return self
 
 
+T = TypeVar("T", bound="FileIOWrapperBase")
+
+
 class FileIOWrapperBase(ABC):
     _READLINE_CHUNK_SIZE = 4192
 
@@ -163,8 +166,12 @@ class FileIOWrapperBase(ABC):
         self._lock = asyncio.Lock()
         self.file = afp
 
+    async def _set_offset(self) -> None:
         if self.file.mode.appending:
-            self._offset = os.stat(afp.name).st_size
+            try:
+                self._offset = (await asyncio.to_thread(os.stat, self.file.name)).st_size
+            except FileNotFoundError:
+                pass
 
     @abstractmethod
     async def read(self, length: int = -1) -> Any:
@@ -189,7 +196,8 @@ class FileIOWrapperBase(ABC):
     async def close(self) -> None:
         await self.file.close()
 
-    async def __aenter__(self) -> "FileIOWrapperBase":
+    async def __aenter__(self: T) -> T:
+        await self._set_offset()
         await self.file.open()
         return self
 
@@ -317,6 +325,22 @@ class TextFileWrapper(FileIOWrapperBase):
                         line.encode(encoding=self.encoding),
                     )
                     return line
+
+
+@overload
+def async_open(
+    file_specifier: Union[str, Path, FileIOType],
+    mode: Literal["r", "w", "a", "r+", "w+", "a+"], *args: Any, **kwargs: Any
+) -> TextFileWrapper:
+    ...
+
+
+@overload
+def async_open(
+    file_specifier: Union[str, Path, FileIOType],
+    mode: Literal["rb", "wb", "ab", "rb+", "wb+", "ab+"], *args: Any, **kwargs: Any
+) -> BinaryFileWrapper:
+    ...
 
 
 def async_open(
