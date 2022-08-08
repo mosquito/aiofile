@@ -606,7 +606,7 @@ async def test_async_open_iter_chunked(size, async_open, tmp_path: Path):
 
 
 async def test_open_non_existent_file_with_append(
-    async_open, tmp_path: Path
+    async_open, tmp_path: Path,
 ):
     tmp_fpath = tmp_path / "numbers.txt"
 
