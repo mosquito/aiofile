@@ -14,7 +14,8 @@ from weakref import finalize
 import caio
 from caio.asyncio_base import AsyncioContextBase
 
-_T = TypeVar('_T')
+
+_T = TypeVar("_T")
 
 AIO_FILE_NOT_OPENED = -1
 AIO_FILE_CLOSED = -2
@@ -79,7 +80,7 @@ def parse_mode(mode: str) -> FileMode:    # noqa: C901
             rwa = True
             writable = True
             appending = True
-            flags |= os.O_APPEND | os.O_CREAT
+            flags |= os.O_CREAT | os.O_APPEND
 
         if m == "+":
             if plus:

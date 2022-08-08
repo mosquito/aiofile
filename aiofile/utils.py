@@ -5,7 +5,7 @@ import os
 from abc import ABC, abstractmethod
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any, Tuple, Union, Generator
+from typing import Any, Generator, Tuple, Union
 
 from .aio import AIOFile, FileIOType
 
@@ -164,7 +164,10 @@ class FileIOWrapperBase(ABC):
         self.file = afp
 
         if self.file.mode.appending:
-            self._offset = os.stat(afp.name).st_size
+            try:
+                self._offset = os.stat(afp.name).st_size
+            except FileNotFoundError:
+                self._offset = 0
 
     @abstractmethod
     async def read(self, length: int = -1) -> Any:

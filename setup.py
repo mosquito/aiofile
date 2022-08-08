@@ -51,7 +51,6 @@ setup(
     extras_require={
         "develop": [
             "aiomisc",
-            "asynctest",
             "pytest",
             "pytest-cov",
         ],
