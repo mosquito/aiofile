@@ -44,9 +44,6 @@ jobs:
 
       matrix:
         include:
-          - python-versions: 3.6
-            toxenv: py36
-            os: ubuntu-latest
           - python-versions: 3.7
             toxenv: py37
             os: ubuntu-latest
@@ -59,9 +56,6 @@ jobs:
           - python-versions: "3.10"
             toxenv: py310
             os: ubuntu-latest
-          - python-versions: 3.6
-            toxenv: py36
-            os: macos-latest
           - python-versions: 3.7
             toxenv: py37
             os: macos-latest
@@ -74,9 +68,6 @@ jobs:
           - python-versions: "3.10"
             toxenv: py310
             os: macos-latest
-          - python-versions: 3.6
-            toxenv: py36
-            os: windows-latest
           - python-versions: 3.7
             toxenv: py37
             os: windows-latest

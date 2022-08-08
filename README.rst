@@ -120,6 +120,32 @@ Basic example:
     loop = asyncio.get_event_loop()
     loop.run_until_complete(main())
 
+Example witout context manager:
+
+.. code-block:: python
+    :name: test_no_context_manager
+
+    import asyncio
+    import atexit
+    import os
+    from tempfile import mktemp
+
+    from aiofile import async_open
+
+
+    TMP_NAME = mktemp()
+    atexit.register(os.unlink, TMP_NAME)
+
+
+    async def main():
+        afp = await async_open(TMP_NAME, "w")
+        await afp.write("Hello")
+        await afp.close()
+
+
+    asyncio.run(main())
+    assert open(TMP_NAME, "r").read() == "Hello"
+
 
 Concatenate example program (``cat``):
 
@@ -192,8 +218,8 @@ Example with opening already opened file pointer:
 
 
     with open("test.txt", "w+") as fp:
-        loop = asyncio.get_event_loop()
-        loop.run_until_complete(main(fp))
+        asyncio.run(main(fp))
+
 
 Linux native aio doesn't support reading and writing special files
 (e.g. procfs/sysfs/unix pipes/etc.) so you can perform operations with

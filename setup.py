@@ -38,8 +38,6 @@ setup(
         "Operating System :: MacOS :: MacOS X",
         "Programming Language :: Python",
         "Programming Language :: Python :: 3 :: Only",
-        "Programming Language :: Python :: 3.5",
-        "Programming Language :: Python :: 3.6",
         "Programming Language :: Python :: 3.7",
         "Programming Language :: Python :: 3.8",
         "Programming Language :: Python :: 3.9",
@@ -49,7 +47,7 @@ setup(
         "Topic :: System",
         "Topic :: System :: Operating System",
     ],
-    python_requires=">3.4, <4",
+    python_requires=">=3.7, <4",
     extras_require={
         "develop": [
             "aiomisc",
