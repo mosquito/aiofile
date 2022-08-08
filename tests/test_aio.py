@@ -6,9 +6,9 @@ from base64 import b64encode
 from io import BytesIO
 from pathlib import Path
 from random import shuffle
+from unittest.mock import Mock, call
 from uuid import uuid4
 
-import asynctest
 import caio
 import pytest
 
@@ -18,6 +18,11 @@ from aiofile.utils import (
 )
 
 from .impl import split_by
+
+
+class CoroutineMock(Mock):
+    async def __call__(self, *args, **kwargs):
+        return super().__call__(*args, **kwargs)
 
 
 @pytest.fixture
@@ -337,37 +342,38 @@ async def test_write_read_nothing(aio_file_maker, temp_file, mode, data):
 
 
 async def test_partial_writes(temp_file, loop):
-    ctx = asynctest.Mock(caio.AbstractContext)
+    ctx = Mock(caio.AbstractContext)
     ctx.loop = loop
-    ctx.fdsync = asynctest.CoroutineMock(return_value=None)
-    ctx.write = asynctest.CoroutineMock(side_effect=asyncio.InvalidStateError)
+    ctx.fdsync = CoroutineMock(return_value=None)
+    ctx.write = CoroutineMock(side_effect=asyncio.InvalidStateError)
 
     async with AIOFile(temp_file, "w", context=ctx) as afp:
-        # 1
+        # 1. writing first three bytes then last four
         return_iter = iter((3, 4))
         ctx.write.side_effect = lambda *_, **__: next(return_iter)
         await afp.write("aiofile", offset=0)
-        # 2
+        # 2. then writing 12 bytes then one and the last 6.
         return_iter = iter((12, 1, 6))
         ctx.write.side_effect = lambda *_, **__: next(return_iter)
         await afp.write("test_partial_writes", offset=8)
 
-        assert ctx.write.await_args_list == [
+        # compare all chunks against expected
+        assert ctx.write.call_args_list == [
             # 1
-            asynctest.call(b"aiofile", afp.fileno(), 0),
-            asynctest.call(b"file", afp.fileno(), 3),
+            call(b"aiofile", afp.fileno(), 0),
+            call(b"file", afp.fileno(), 3),
             # 2
-            asynctest.call(b"test_partial_writes", afp.fileno(), 8),
-            asynctest.call(b"_writes", afp.fileno(), 20),
-            asynctest.call(b"writes", afp.fileno(), 21),
+            call(b"test_partial_writes", afp.fileno(), 8),
+            call(b"_writes", afp.fileno(), 20),
+            call(b"writes", afp.fileno(), 21),
         ]
 
 
 async def test_write_returned_negative(temp_file, loop):
-    ctx = asynctest.Mock(caio.AbstractContext)
+    ctx = Mock(caio.AbstractContext)
     ctx.loop = loop
-    ctx.fdsync = asynctest.CoroutineMock(return_value=None)
-    ctx.write = asynctest.CoroutineMock(side_effect=asyncio.InvalidStateError)
+    ctx.fdsync = CoroutineMock(return_value=None)
+    ctx.write = CoroutineMock(side_effect=asyncio.InvalidStateError)
 
     async with AIOFile(temp_file, "w", context=ctx) as afp:
         return_iter = iter((3, -27))
@@ -386,10 +392,10 @@ async def test_write_returned_negative(temp_file, loop):
 
 
 async def test_write_returned_zero(temp_file, loop):
-    ctx = asynctest.Mock(caio.AbstractContext)
+    ctx = Mock(caio.AbstractContext)
     ctx.loop = loop
-    ctx.fdsync = asynctest.CoroutineMock(return_value=None)
-    ctx.write = asynctest.CoroutineMock(side_effect=asyncio.InvalidStateError)
+    ctx.fdsync = CoroutineMock(return_value=None)
+    ctx.write = CoroutineMock(side_effect=asyncio.InvalidStateError)
 
     async with AIOFile(temp_file, "w", context=ctx) as afp:
         return_iter = iter((3, 0))
@@ -597,3 +603,26 @@ async def test_async_open_iter_chunked(size, async_open, tmp_path: Path):
             return hasher.hexdigest()
 
     assert hash_file(src_path) == hash_file(dst_path)
+
+
+async def test_open_non_existent_file_with_append(
+    async_open, tmp_path: Path
+):
+    tmp_fpath = tmp_path / "numbers.txt"
+
+    async with async_open(tmp_fpath, "a+") as afp:
+        for i in range(10):
+            await afp.write(str(i))
+            await afp.write("\n")
+
+    async with async_open(tmp_fpath, "a+") as afp:
+        for i in range(10, 20):
+            await afp.write(str(i))
+            await afp.write("\n")
+
+    numbers = []
+    async with async_open(tmp_fpath, "r") as afp:
+        async for line in afp:
+            numbers.append(int(line.strip()))
+
+    assert numbers == list(range(20))
