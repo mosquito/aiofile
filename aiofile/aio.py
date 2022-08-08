@@ -14,7 +14,8 @@ from weakref import finalize
 import caio
 from caio.asyncio_base import AsyncioContextBase
 
-_T = TypeVar('_T')
+
+_T = TypeVar("_T")
 
 AIO_FILE_NOT_OPENED = -1
 AIO_FILE_CLOSED = -2
