@@ -199,6 +199,29 @@ async def test_non_existent_file_ctx(aio_file_maker):
             pass
 
 
+async def test_sequential_open(aio_file_maker, temp_file):
+    file = aio_file_maker(temp_file, "r")
+    try:
+        assert isinstance(await file.open(), int)
+        assert await file.open() is None
+    finally:
+        await file.close()
+
+    with pytest.raises(asyncio.InvalidStateError):
+        await file.open()
+
+
+async def test_parallel_open(aio_file_maker, temp_file):
+    file = aio_file_maker(temp_file, "r")
+    try:
+        # open() returns a file descriptor if it has opened a file, otherwise
+        # None. Only one of multiple parallel calls should actually open a file.
+        opens = await asyncio.gather(*(file.open() for _ in range(3)))
+        assert len([fd for fd in opens if fd is not None]) == 1
+    finally:
+        await file.close()
+
+
 async def test_line_reader(aio_file_maker, temp_file, uuid):
     afp = await aio_file_maker(temp_file, "w+")
 
