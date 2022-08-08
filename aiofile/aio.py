@@ -79,7 +79,7 @@ def parse_mode(mode: str) -> FileMode:    # noqa: C901
             rwa = True
             writable = True
             appending = True
-            flags |= os.O_APPEND | os.O_CREAT
+            flags |= os.O_CREAT | os.O_APPEND
 
         if m == "+":
             if plus:
