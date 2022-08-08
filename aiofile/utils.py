@@ -189,6 +189,10 @@ class FileIOWrapperBase(ABC):
     async def close(self) -> None:
         await self.file.close()
 
+    def __await__(self):
+        yield from self.file.__await__()
+        return self
+
     async def __aenter__(self) -> "FileIOWrapperBase":
         await self.file.open()
         return self
