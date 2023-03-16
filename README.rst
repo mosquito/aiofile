@@ -282,7 +282,7 @@ like read or write as it is implemented in a built-in open.
 
 
     async def main():
-        async with AIOFile("/tmp/hello.txt", 'w+') as afp:
+        async with AIOFile("hello.txt", 'w+') as afp:
             payload = "Hello world\n"
 
             await asyncio.gather(
