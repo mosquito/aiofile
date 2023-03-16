@@ -18,6 +18,10 @@ AIOFile
 .. image:: https://img.shields.io/pypi/l/aiofile.svg
     :target: https://pypi.python.org/pypi/aiofile/
 
+.. image:: https://coveralls.io/repos/github/mosquito/aiofile/badge.svg?branch=master
+    :target: https://coveralls.io/github/mosquito/aiofile?branch=master
+
+
 
 Real asynchronous file operations with asyncio support.
 
