@@ -54,6 +54,7 @@ setup(
             "pytest",
             "pytest-rst",
             "pytest-cov",
+            "coveralls",
         ],
     },
     install_requires=["caio~=0.9.0"],
