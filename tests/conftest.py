@@ -36,12 +36,12 @@ IMPLEMENTATION_NAMES = map(lambda x: x.__name__, IMPLEMENTATIONS)
 
 
 @pytest.fixture(params=IMPLEMENTATIONS, ids=IMPLEMENTATION_NAMES)
-async def aio_context(request, loop):
+async def aio_context(request, event_loop):
     if isinstance(request.param, DefaultContext):
         yield None
         return
 
-    async with request.param.AsyncioContext(loop=loop) as context:
+    async with request.param.AsyncioContext(loop=event_loop) as context:
         yield context
 
 
