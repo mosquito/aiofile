@@ -120,7 +120,7 @@ Basic example:
     loop = asyncio.get_event_loop()
     loop.run_until_complete(main())
 
-Example witout context manager:
+Example without context manager:
 
 .. code-block:: python
     :name: test_no_context_manager
