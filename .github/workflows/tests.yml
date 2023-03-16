@@ -56,6 +56,9 @@ jobs:
           - python-versions: "3.10"
             toxenv: py310
             os: ubuntu-latest
+          - python-versions: "3.11"
+            toxenv: py310
+            os: ubuntu-latest
           - python-versions: 3.7
             toxenv: py37
             os: macos-latest
@@ -67,6 +70,9 @@ jobs:
             os: macos-latest
           - python-versions: "3.10"
             toxenv: py310
+            os: macos-latest
+          - python-versions: "3.11"
+            toxenv: py311
             os: macos-latest
           - python-versions: 3.7
             toxenv: py37
@@ -83,10 +89,22 @@ jobs:
           - python-versions: "3.10"
             toxenv: readme
             os: windows-latest
+          - python-versions: "3.11"
+            toxenv: py311
+            os: windows-latest
           - python-versions: "3.10"
             toxenv: readme
             os: macos-latest
           - python-versions: "3.10"
+            toxenv: readme
+            os: ubuntu-latest
+          - python-versions: "3.11"
+            toxenv: readme
+            os: windows-latest
+          - python-versions: "3.11"
+            toxenv: readme
+            os: macos-latest
+          - python-versions: "3.11"
             toxenv: readme
             os: ubuntu-latest
 

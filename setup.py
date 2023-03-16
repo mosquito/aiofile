@@ -52,6 +52,7 @@ setup(
         "develop": [
             "aiomisc-pytest",
             "pytest",
+            "pytest-rst",
             "pytest-cov",
         ],
     },

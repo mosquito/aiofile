@@ -275,6 +275,7 @@ In order to provide sequential reading and writing, there is `Writer`, `Reader` 
 like read or write as it is implemented in a built-in open.
 
 .. code-block:: python
+    :name: test_low_level_api
 
     import asyncio
     from aiofile import AIOFile
@@ -285,14 +286,14 @@ like read or write as it is implemented in a built-in open.
             payload = "Hello world\n"
 
             await asyncio.gather(
-                *[afp.write(payload, offset=i * len(payload) for i in range(10))]
+                *[afp.write(payload, offset=i * len(payload)) for i in range(10)]
             )
 
             await afp.fsync()
 
+            assert await afp.read(len(payload) * 10) == payload * 10
 
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(main())
+    asyncio.run(main())
 
 ``Reader`` and ``Writer``
 ~~~~~~~~~~~~~~~~~~~~~~~~~
