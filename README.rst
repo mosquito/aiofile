@@ -258,6 +258,41 @@ this files using compatible context object.
 
     asyncio.run(main())
 
+Low-level API
+++++++++++++++
+
+The `AIOFile` class is a low-level interface for asynchronous file operations, and the read and write methods accept
+an `offset=0` in bytes at which the operation will be performed.
+
+This allows you to do many independent IO operations on an once opened file without moving the virtual carriage.
+
+For example, you may made 10 concurrent HTTP requests by specifying the `Range` header, and asynchronously write
+one opened file, while the offsets must either be calculated manually, or use 10 instances of `Writer` with
+specified initial offsets.
+
+In order to provide sequential reading and writing, there is `Writer`, `Reader` and `LineReader`. Keep in mind
+`async_open` is not the same as AIOFile, it provides a similar interface for file operations, it simulates methods
+like read or write as it is implemented in a built-in open.
+
+.. code-block:: python
+
+    import asyncio
+    from aiofile import AIOFile
+
+
+    async def main():
+        async with AIOFile("/tmp/hello.txt", 'w+') as afp:
+            payload = "Hello world\n"
+
+            await asyncio.gather(
+                *[afp.write(payload, offset=i * len(payload) for i in range(10))]
+            )
+
+            await afp.fsync()
+
+
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(main())
 
 ``Reader`` and ``Writer``
 ~~~~~~~~~~~~~~~~~~~~~~~~~
