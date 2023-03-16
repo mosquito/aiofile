@@ -35,7 +35,7 @@ Development - Stable
 Features
 --------
 
-* Since version 2.0.0 using `caio`_, is contain linux libaio and two
+* Since version 2.0.0 using `caio`_, is contain linux ``libaio`` and two
   thread-based implementations (c-based and pure-python).
 * AIOFile has no internal pointer. You should pass ``offset`` and
   ``chunk_size`` for each operation or use helpers (Reader or Writer).
@@ -460,16 +460,8 @@ Async CSV Dict Reader
                 print(item)
 
 
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
+    asyncio.run(main())
 
-
-    try:
-        loop.run_until_complete(main())
-    finally:
-        # Shutting down and closing file descriptors after interrupt
-        loop.run_until_complete(loop.shutdown_asyncgens())
-        loop.close()
 
 .. _troubleshooting:
 
