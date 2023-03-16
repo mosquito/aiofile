@@ -299,6 +299,27 @@ like read or write as it is implemented in a built-in open.
 
     asyncio.run(main())
 
+The Low-level API is fact is just little bit sugared ``caio`` API.
+
+.. code-block:: python
+
+    import asyncio
+    from aiofile import AIOFile
+
+
+    async def main():
+        async with AIOFile("/tmp/hello.txt", 'w+') as afp:
+            await afp.write("Hello ")
+            await afp.write("world", offset=7)
+            await afp.fsync()
+
+            print(await afp.read())
+
+
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(main())
+
+
 ``Reader`` and ``Writer``
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -370,60 +391,6 @@ The default chunk size is 4KB.
 When you want to read file by lines please avoid to use ``async_open``
 use ``LineReader`` instead.
 
-Low-level API
-+++++++++++++
-
-Following API is just little bit sugared ``caio`` API.
-
-Write and Read
-~~~~~~~~~~~~~~
-
-.. code-block:: python
-
-    import asyncio
-    from aiofile import AIOFile
-
-
-    async def main():
-        async with AIOFile("/tmp/hello.txt", 'w+') as afp:
-            await afp.write("Hello ")
-            await afp.write("world", offset=7)
-            await afp.fsync()
-
-            print(await afp.read())
-
-
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(main())
-
-
-
-Read file line by line
-~~~~~~~~~~~~~~~~~~~~~~
-
-.. code-block:: python
-
-    import asyncio
-    from aiofile import AIOFile, LineReader, Writer
-
-
-    async def main():
-        async with AIOFile("/tmp/hello.txt", 'w') as afp:
-            writer = Writer(afp)
-
-            for i in range(10):
-                await writer("%d Hello World\n" % i)
-
-            await writer("Tail-less string")
-
-
-        async with AIOFile("/tmp/hello.txt", 'r') as afp:
-            async for line in LineReader(afp):
-                print(line[:-1])
-
-
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(main())
 
 More examples
 -------------
