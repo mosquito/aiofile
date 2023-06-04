@@ -35,15 +35,15 @@ Development - Stable
 Features
 --------
 
-* Since version 2.0.0 using `caio`_, is contain linux ``libaio`` and two
+* Since version 2.0.0 using `caio`_, which contains linux ``libaio`` and two
   thread-based implementations (c-based and pure-python).
 * AIOFile has no internal pointer. You should pass ``offset`` and
   ``chunk_size`` for each operation or use helpers (Reader or Writer).
-  The simples way is use ``async_open`` for create object with
+  The simples way is to use ``async_open`` for creating object with
   file-like interface.
 * For Linux using implementation based on `libaio`_.
 * For POSIX (MacOS X and optional Linux) using implementation
-  using on `threadpool`_.
+  based on `threadpool`_.
 * Otherwise using pure-python thread-based implementation.
 * Implementation chooses automatically depending on system compatibility.
 
@@ -55,13 +55,13 @@ Features
 Limitations
 -----------
 
-* Linux native AIO implementation not able to open special files.
-  Asynchronous operations against special fs like ``/proc/`` ``/sys/`` not
+* Linux native AIO implementation is not able to open special files.
+  Asynchronous operations against special fs like ``/proc/`` ``/sys/`` are not
   supported by the kernel. It's not a `aiofile`s or `caio` issue.
-  To In this cases, you might switch to thread-based implementations
+  In this cases, you might switch to thread-based implementations
   (see troubleshooting_ section).
   However, when used on supported file systems, the linux implementation has a
-  smaller overhead and preferred but it's not a silver bullet.
+  smaller overhead and is preferred but it's not a silver bullet.
 
 Code examples
 -------------
@@ -74,21 +74,21 @@ High-level API
 ``async_open`` helper
 ~~~~~~~~~~~~~~~~~~~~~
 
-Helper mimics to python python file-like objects, it's returns file like
-object with similar but async methods.
+Helper mimics python file-like objects, it returns file-like
+objects with similar but async methods.
 
 Supported methods:
 
 * ``async def read(length = -1)`` - reading chunk from file, when length is
-  ``-1`` will be read file to the end.
-* ``async def write(data)`` - write chunk to file
-* ``def seek(offset)`` - set file pointer position
+  ``-1``, will be reading file to the end.
+* ``async def write(data)`` - writing chunk to file
+* ``def seek(offset)`` - setting file pointer position
 * ``def tell()`` - returns current file pointer position
 * ``async def readline(size=-1, newline="\n")`` - read chunks until
   newline or EOF. Since version 3.7.0 ``__aiter__`` returns ``LineReader``.
 
-  This method suboptimal for small lines because doesn't reuse read buffer.
-  When you want to read file by lines please avoid to use ``async_open``
+  This method is suboptimal for small lines because it doesn't reuse read buffer.
+  When you want to read file by lines please avoid using ``async_open``
   use ``LineReader`` instead.
 * ``def __aiter__() -> LineReader`` - iterator over lines.
 * ``def iter_chunked(chunk_size: int = 32768) -> Reader`` - iterator over
@@ -205,7 +205,7 @@ Copy file example program (``cp``):
     asyncio.run(main(parser.parse_args()))
 
 
-Example with opening already opened file pointer:
+Example with opening already open file pointer:
 
 .. code-block:: python
     :name: test_opened
@@ -226,8 +226,8 @@ Example with opening already opened file pointer:
 
 
 Linux native aio doesn't support reading and writing special files
-(e.g. procfs/sysfs/unix pipes/etc.) so you can perform operations with
-this files using compatible context object.
+(e.g. procfs/sysfs/unix pipes/etc.), so you can perform operations with
+these files using compatible context objects.
 
 .. code-block:: python
 
@@ -268,15 +268,15 @@ Low-level API
 The `AIOFile` class is a low-level interface for asynchronous file operations, and the read and write methods accept
 an `offset=0` in bytes at which the operation will be performed.
 
-This allows you to do many independent IO operations on an once opened file without moving the virtual carriage.
+This allows you to do many independent IO operations on an once open file without moving the virtual carriage.
 
-For example, you may made 10 concurrent HTTP requests by specifying the `Range` header, and asynchronously write
+For example, you may make 10 concurrent HTTP requests by specifying the `Range` header, and asynchronously write
 one opened file, while the offsets must either be calculated manually, or use 10 instances of `Writer` with
 specified initial offsets.
 
 In order to provide sequential reading and writing, there is `Writer`, `Reader` and `LineReader`. Keep in mind
 `async_open` is not the same as AIOFile, it provides a similar interface for file operations, it simulates methods
-like read or write as it is implemented in a built-in open.
+like read or write as it is implemented in the built-in open.
 
 .. code-block:: python
     :name: test_low_level_api
@@ -299,7 +299,7 @@ like read or write as it is implemented in a built-in open.
 
     asyncio.run(main())
 
-The Low-level API is fact is just little bit sugared ``caio`` API.
+The Low-level API in fact is just little bit sugared ``caio`` API.
 
 .. code-block:: python
 
@@ -473,7 +473,7 @@ and file systems. So you may have problems specific for your environment.
 It's not a bug and might be resolved some ways:
 
 1. Upgrade the kernel
-2. Use compatible file system
+2. Use compatible file systems
 3. Use threads based or pure python implementation.
 
 The caio since version 0.7.0 contains some ways to do this.
