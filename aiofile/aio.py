@@ -204,8 +204,10 @@ class AIOFile:
 
     async def clone(self) -> "AIOFile":
         """
-        Increases the clone count by one, as long as the clone count is greater than zero, all ``self.close()``
-        calls will only decrease the clone count without really closing anything.
+        Increases the clone count by one, as long as the clone
+        count is greater than zero, all ``self.close()``
+        calls will only decrease the clone count without
+        really closing anything.
         """
         async with self._clone_lock:
             self._clones += 1
