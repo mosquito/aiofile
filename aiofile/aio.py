@@ -1,13 +1,12 @@
 import asyncio
 import os
-from collections import namedtuple
 from concurrent.futures import Executor
 from functools import partial
 from os import strerror
 from pathlib import Path
 from typing import (
-    Any, Awaitable, BinaryIO, Callable, Dict, Generator, Optional, TextIO,
-    TypeVar, Union,
+    IO, Any, Awaitable, BinaryIO, Callable, Dict, Generator, Optional, TextIO,
+    TypeVar, Union, NamedTuple,
 )
 from weakref import finalize
 
@@ -20,97 +19,95 @@ _T = TypeVar("_T")
 AIO_FILE_NOT_OPENED = -1
 AIO_FILE_CLOSED = -2
 
-FileIOType = Union[TextIO, BinaryIO]
-
-FileMode = namedtuple(
-    "FileMode", (
-        "readable",
-        "writable",
-        "plus",
-        "appending",
-        "created",
-        "flags",
-        "binary",
-    ),
-)
+FileIOType = Union[TextIO, BinaryIO, IO]
 
 
-def parse_mode(mode: str) -> FileMode:    # noqa: C901
-    """ Rewritten from `cpython fileno`_
+class FileMode(NamedTuple):
+    readable: bool
+    writable: bool
+    plus: bool
+    appending: bool
+    created: bool
+    flags: int
+    binary: bool
 
-    .. _cpython fileio: https://bit.ly/2JY2cnp
-    """
+    @classmethod
+    def parse(cls, mode) -> "FileMode":
+        """ Rewritten from `cpython fileno`_
 
-    flags = os.O_RDONLY
+        .. _cpython fileio: https://bit.ly/2JY2cnp
+        """
 
-    rwa = False
-    writable = False
-    readable = False
-    plus = False
-    appending = False
-    created = False
-    binary = False
+        flags = os.O_RDONLY
 
-    for m in mode:
-        if m == "x":
-            rwa = True
-            created = True
-            writable = True
-            flags |= os.O_EXCL | os.O_CREAT
+        rwa = False
+        writable = False
+        readable = False
+        plus = False
+        appending = False
+        created = False
+        binary = False
 
-        if m == "r":
-            if rwa:
-                raise Exception("Bad mode")
+        for m in mode:
+            if m == "x":
+                rwa = True
+                created = True
+                writable = True
+                flags |= os.O_EXCL | os.O_CREAT
 
-            rwa = True
-            readable = True
+            if m == "r":
+                if rwa:
+                    raise Exception("Bad mode")
 
-        if m == "w":
-            if rwa:
-                raise Exception("Bad mode")
+                rwa = True
+                readable = True
 
-            rwa = True
-            writable = True
+            if m == "w":
+                if rwa:
+                    raise Exception("Bad mode")
 
-            flags |= os.O_CREAT | os.O_TRUNC
+                rwa = True
+                writable = True
 
-        if m == "a":
-            if rwa:
-                raise Exception("Bad mode")
-            rwa = True
-            writable = True
-            appending = True
-            flags |= os.O_CREAT | os.O_APPEND
+                flags |= os.O_CREAT | os.O_TRUNC
 
-        if m == "+":
-            if plus:
-                raise Exception("Bad mode")
-            readable = True
-            writable = True
-            plus = True
+            if m == "a":
+                if rwa:
+                    raise Exception("Bad mode")
+                rwa = True
+                writable = True
+                appending = True
+                flags |= os.O_CREAT | os.O_APPEND
 
-        if m == "b":
-            binary = True
-            if hasattr(os, "O_BINARY"):
-                flags |= os.O_BINARY
+            if m == "+":
+                if plus:
+                    raise Exception("Bad mode")
+                readable = True
+                writable = True
+                plus = True
 
-    if readable and writable:
-        flags |= os.O_RDWR
+            if m == "b":
+                binary = True
+                if hasattr(os, "O_BINARY"):
+                    flags |= os.O_BINARY
 
-    elif readable:
-        flags |= os.O_RDONLY
-    else:
-        flags |= os.O_WRONLY
+        if readable and writable:
+            flags |= os.O_RDWR
 
-    return FileMode(
-        readable=readable,
-        writable=writable,
-        plus=plus,
-        appending=appending,
-        created=created,
-        flags=flags,
-        binary=binary,
-    )
+        elif readable:
+            flags |= os.O_RDONLY
+        else:
+            flags |= os.O_WRONLY
+
+        return cls(
+            readable=readable,
+            writable=writable,
+            plus=plus,
+            appending=appending,
+            created=created,
+            flags=flags,
+            binary=binary,
+        )
 
 
 class AIOFile:
@@ -133,7 +130,7 @@ class AIOFile:
         self._fname = str(filename)
         self._open_mode = mode
 
-        self.mode = parse_mode(mode)
+        self.mode = FileMode.parse(mode)
 
         self._file_obj = None
         self._file_obj_owner = True

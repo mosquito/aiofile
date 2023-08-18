@@ -58,5 +58,7 @@ setup(
             "coveralls",
         ],
     },
-    install_requires=["caio~=0.9.0"],
+    install_requires=[
+        "caio~=0.9.0"
+    ],
 )
