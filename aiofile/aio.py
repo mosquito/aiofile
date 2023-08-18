@@ -5,8 +5,8 @@ from functools import partial
 from os import strerror
 from pathlib import Path
 from typing import (
-    IO, Any, Awaitable, BinaryIO, Callable, Dict, Generator, Optional, TextIO,
-    TypeVar, Union, NamedTuple,
+    IO, Any, Awaitable, BinaryIO, Callable, Dict, Generator, NamedTuple,
+    Optional, TextIO, TypeVar, Union,
 )
 from weakref import finalize
 
