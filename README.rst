@@ -262,6 +262,61 @@ these files using compatible context objects.
 
     asyncio.run(main())
 
+
+``clone`` helper
+~~~~~~~~~~~~~~~~
+
+Asynchronous context at a low level supports a limited number of concurrency operations, no matter how many
+file descriptors are open. This means that you can make a second file-like object with its own offset stub
+for one descriptor without opening the file several times.
+
+.. code-block:: python
+
+    """
+    This example counts multiple hash functions from the file passed as the first argument.
+    The hash functions are counted competitively, and the results are printed in the order of hashing completion.
+    """
+    import asyncio
+    import hashlib
+    import sys
+
+    import aiofile
+
+
+    async def hasher(name, hash_func, afp):
+        loop = asyncio.get_running_loop()
+        async for chunk in afp.iter_chunked(2 ** 20):
+            await loop.run_in_executor(None, hash_func.update, chunk)
+        print(name, hash_func.hexdigest())
+
+
+    async def main():
+        async with aiofile.async_open(sys.argv[1], "rb") as source:
+            hashers = [
+                ("MD5", hashlib.md5()),
+                ("SHA1", hashlib.sha1()),
+                ("SHA256", hashlib.sha256()),
+                ("SHA512", hashlib.sha512()),
+                ("SHA3 224", hashlib.sha3_224()),
+                ("SHA3 256", hashlib.sha3_256()),
+                ("SHA3 512", hashlib.sha3_512()),
+                ("Blake2b", hashlib.blake2b()),
+            ]
+
+            await asyncio.gather(*[
+                hasher(name, hash_func, await aiofile.clone(source))
+                for name, hash_func in hashers
+            ])
+
+
+    asyncio.run(main())
+
+
+.. note::
+
+    In fact this will most likely perform very bad under windows, so if that's your target platform it's not
+    worth it to apply this optimization.
+
 Low-level API
 ++++++++++++++
 

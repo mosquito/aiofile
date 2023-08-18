@@ -139,6 +139,8 @@ class AIOFile:
         self._file_obj_owner = True
         self._encoding = encoding
         self._executor = executor
+        self._clone_lock = asyncio.Lock()
+        self._clones = 0
 
     @classmethod
     def from_fp(cls, fp: FileIOType, **kwargs: Any) -> "AIOFile":
@@ -193,10 +195,24 @@ class AIOFile:
         if self._file_obj is None or not self._file_obj_owner:
             return
 
+        async with self._clone_lock:
+            if self._clones > 0:
+                self._clones -= 1
+                return
+
         if self.mode.writable:
             await self.fdsync()
 
         await self._run_in_thread(self._file_obj.close)
+
+    async def clone(self) -> "AIOFile":
+        """
+        Increases the clone count by one, as long as the clone count is greater than zero, all ``self.close()``
+        calls will only decrease the clone count without really closing anything.
+        """
+        async with self._clone_lock:
+            self._clones += 1
+            return self
 
     def fileno(self) -> int:
         if self._file_obj is None:
