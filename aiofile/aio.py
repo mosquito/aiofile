@@ -32,7 +32,7 @@ class FileMode(NamedTuple):
     binary: bool
 
     @classmethod
-    def parse(cls, mode) -> "FileMode":
+    def parse(cls, mode: str) -> "FileMode":
         """ Rewritten from `cpython fileno`_
 
         .. _cpython fileio: https://bit.ly/2JY2cnp

@@ -358,10 +358,10 @@ class FileIOCloner(Generic[T]):
         self.cloned_afp: Optional[T] = None
         self.cloned_lock = asyncio.Lock()
 
-    async def __clone(self):
+    async def __clone(self) -> T:
         async with self.cloned_lock:
             if self.cloned_afp is not None:
-                return
+                return self.cloned_afp
 
             self.cloned_afp = self.source_afp.__class__(
                 await self.source_afp.file.clone(),
@@ -373,10 +373,12 @@ class FileIOCloner(Generic[T]):
 
     async def __aenter__(self) -> T:
         if self.cloned_afp is None:
-            await self.__clone()
+            return await self.__clone()
         return self.cloned_afp
 
     async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+        if self.cloned_afp is None:
+            return
         await self.cloned_afp.close()
 
 
