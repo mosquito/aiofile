@@ -194,7 +194,7 @@ class AIOFile:
             return
 
         if self.mode.writable:
-            await self.fsync()
+            await self.fdsync()
 
         await self._run_in_thread(self._file_obj.close)
 
