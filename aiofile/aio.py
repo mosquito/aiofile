@@ -194,7 +194,7 @@ class AIOFile:
             return
 
         if self.mode.writable:
-            await self.fsync()
+            await self.fdsync()
 
         await self._run_in_thread(self._file_obj.close)
 
@@ -262,7 +262,7 @@ class AIOFile:
         # corresponding error) or write has been interrupted by
         # an incoming signal
 
-        # behaviour here in regards to continue trying to write remaining data
+        # behaviour here in regard to continue trying to write remaining data
         # corresponds to the behaviour of io.BufferedIOBase
         # (https://docs.python.org/3/library/io.html#io.BufferedIOBase.write)
         # which used by object returned open() with `buffering` argument >= 1
@@ -280,7 +280,7 @@ class AIOFile:
             elif res < 0:
                 # fix for linux_aio implementation bug in caio<=0.6.1
                 # (https://github.com/mosquito/caio/pull/7)
-                # and safeguard from future similar issues
+                # and safeguard against future similar issues
                 errno = -res
                 raise OSError(errno, strerror(errno), self._fname)
 
@@ -289,6 +289,9 @@ class AIOFile:
         return written
 
     async def fsync(self) -> None:
+        return await self.__context.fsync(self.fileno())
+
+    async def fdsync(self) -> None:
         return await self.__context.fdsync(self.fileno())
 
     def truncate(self, length: int = 0) -> Awaitable[None]:

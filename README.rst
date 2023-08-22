@@ -497,11 +497,11 @@ should be one of ``linux`` ``thread`` or ``python``.
     import asyncio
 
     from aiofile import async_open
-    from caio import python_aio_asyncio, thread_aio_asyncio
+    from caio import linux_aio_asyncio, thread_aio_asyncio
 
 
     async def main():
-        linux_ctx = python_aio_asyncio.AsyncioContext()
+        linux_ctx = linux_aio_asyncio.AsyncioContext()
         threads_ctx = thread_aio_asyncio.AsyncioContext()
 
         async with async_open("/tmp/test.txt", "w", context=linux_ctx) as afp:
