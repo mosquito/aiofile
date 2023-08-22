@@ -681,3 +681,13 @@ async def test_clone_close(
 
         async with clone(afp):
             assert await afp.read()
+
+
+async def test_from_fp(tmp_path):
+    tmp_fpath = tmp_path / 'test.txt'
+
+    with open(tmp_fpath, 'w+') as fp:
+        afp = await AIOFile.from_fp(fp)
+
+    assert await afp.write("Hello world")
+    assert await afp.read() == "Hello world"

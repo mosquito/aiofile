@@ -23,9 +23,6 @@ AIO_FILE_CLOSED = -2
 FileIOType = Union[TextIO, BinaryIO, IO]
 
 
-
-
-
 class FileMode(NamedTuple):
     readable: bool
     writable: bool
@@ -93,10 +90,11 @@ class FileMode(NamedTuple):
             if m == "b":
                 binary = True
 
-            # always add the binary flag because the asynchronous API only works with bytes,
-            # we must always open the file in binary mode.
-            if hasattr(os, "O_BINARY"):
-                flags |= os.O_BINARY
+        if hasattr(os, "O_BINARY"):
+            # always add the binary flag because the asynchronous
+            # API only works with bytes, we must always open the
+            # file in binary mode.
+            flags |= os.O_BINARY
 
         if readable and writable:
             flags |= os.O_RDWR
@@ -141,11 +139,24 @@ class AIOFile:
         self._lock = asyncio.Lock()
         self._clones = 0
 
-    @classmethod
-    def from_fp(cls, fp: FileIOType, **kwargs: Any) -> "AIOFile":
-        afp = cls(fp.name, fp.mode, **kwargs)
-        afp._fileno = os.dup(fp.fileno())
-        return afp
+    if hasattr(os, 'O_BINARY'):
+        # In windows, the file may already be opened in text mode, and you
+        # will have to reopen it in binary mode.
+        # Unlike unix windows does not allow you to delete an already
+        # opened file, so it is relatively safe to open a file by name.
+        @classmethod
+        async def from_fp(cls, fp: FileIOType, **kwargs: Any) -> "AIOFile":
+            afp = cls(fp.name, fp.mode, **kwargs)
+            afp._fileno = await afp._run_in_thread(
+                os.open, fp.name, afp.mode.flags
+            )
+            return afp
+    else:
+        @classmethod
+        async def from_fp(cls, fp: FileIOType, **kwargs: Any) -> "AIOFile":
+            afp = cls(fp.name, fp.mode, **kwargs)
+            afp._fileno = await afp._run_in_thread(os.dup, fp.fileno())
+            return afp
 
     def _run_in_thread(
             self, func: "Callable[..., _T]", *args: Any, **kwargs: Any
