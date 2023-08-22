@@ -1,5 +1,6 @@
 import asyncio
 import os
+import sys
 from concurrent.futures import Executor
 from functools import partial
 from os import strerror
@@ -118,7 +119,7 @@ class AIOFile:
 
     def __init__(
         self, filename: Union[str, Path],
-        mode: str = "r", encoding: str = "utf-8",
+        mode: str = "r", encoding: str = sys.getdefaultencoding(),
         context: Optional[AsyncioContextBase] = None,
         executor: Optional[Executor] = None,
     ):
@@ -159,16 +160,14 @@ class AIOFile:
     def encoding(self) -> str:
         return self._encoding
 
+    def __open(self) -> int:
+        return os.open(self._fname, self.mode.flags)
+
     async def open(self) -> Optional[int]:
         async with self._lock:
             if self._fileno > 0:
                 return None
-
-            self._fileno = await self._run_in_thread(
-                os.open,
-                self._fname,
-                self.mode.flags,
-            )
+            self._fileno = await self._run_in_thread(self.__open)
             return self._fileno
 
     def __repr__(self) -> str:
@@ -220,17 +219,16 @@ class AIOFile:
         data = await self.read_bytes(size, offset)
         return data if self.mode.binary else self.decode_bytes(data)
 
+    async def stat(self) -> os.stat_result:
+        return await self._run_in_thread(os.fstat, self.fileno())
+
     async def read_bytes(self, size: int = -1, offset: int = 0) -> bytes:
         if size < -1:
             raise ValueError("Unsupported value %d for size" % size)
 
         if size == -1:
-            size = (
-                await self._run_in_thread(
-                    os.stat,
-                    self.fileno(),
-                )
-            ).st_size
+            stat = await self.stat()
+            size = stat.st_size
 
         return await self.__context.read(size, self.fileno(), offset)
 
