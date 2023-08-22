@@ -212,8 +212,8 @@ async def test_sequential_open(aio_file_maker, temp_file):
     finally:
         await file.close()
 
-    with pytest.raises(asyncio.InvalidStateError):
-        await file.open()
+    assert await file.open() is not None
+    await file.close()
 
 
 async def test_parallel_open(aio_file_maker, temp_file):

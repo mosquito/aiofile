@@ -111,12 +111,10 @@ class FileMode(NamedTuple):
 
 
 class AIOFile:
-    _file_obj: Optional[FileIOType]
-    _file_obj_owner: bool
+    _fileno: int
     _encoding: str
     _executor: Optional[Executor]
     mode: FileMode
-    __open_result: "Optional[asyncio.Future[FileIOType]]"
 
     def __init__(
         self, filename: Union[str, Path],
@@ -125,26 +123,21 @@ class AIOFile:
         executor: Optional[Executor] = None,
     ):
         self.__context = context or get_default_context()
-        self.__open_result = None
 
         self._fname = str(filename)
-        self._open_mode = mode
 
         self.mode = FileMode.parse(mode)
 
-        self._file_obj = None
-        self._file_obj_owner = True
+        self._fileno = -1
         self._encoding = encoding
         self._executor = executor
-        self._clone_lock = asyncio.Lock()
+        self._lock = asyncio.Lock()
         self._clones = 0
 
     @classmethod
     def from_fp(cls, fp: FileIOType, **kwargs: Any) -> "AIOFile":
         afp = cls(fp.name, fp.mode, **kwargs)
-        afp._file_obj = fp
-        afp._open_mode = fp.mode
-        afp._file_obj_owner = False
+        afp._fileno = os.dup(fp.fileno())
         return afp
 
     def _run_in_thread(
@@ -167,40 +160,34 @@ class AIOFile:
         return self._encoding
 
     async def open(self) -> Optional[int]:
-        if self._file_obj is not None:
-            if self._file_obj.closed:
-                raise asyncio.InvalidStateError("AIOFile closed")
-            return None
+        async with self._lock:
+            if self._fileno > 0:
+                return None
 
-        if self.__open_result is None:
-            self.__open_result = self._run_in_thread(
-                open,
+            self._fileno = await self._run_in_thread(
+                os.open,
                 self._fname,
-                self._open_mode,
+                self.mode.flags,
             )
-            self._file_obj = await self.__open_result
-            self.__open_result = None
-            return self._file_obj.fileno()
-
-        await self.__open_result
-        return None
+            return self._fileno
 
     def __repr__(self) -> str:
         return "<AIOFile: %r>" % self._fname
 
     async def close(self) -> None:
-        if self._file_obj is None or not self._file_obj_owner:
-            return
+        async with self._lock:
+            if self._fileno < 0:
+                return
 
-        async with self._clone_lock:
             if self._clones > 0:
                 self._clones -= 1
                 return
 
-        if self.mode.writable:
-            await self.fdsync()
+            if self.mode.writable:
+                await self.fdsync()
 
-        await self._run_in_thread(self._file_obj.close)
+            await self._run_in_thread(os.close, self._fileno)
+            self._fileno = -1
 
     async def clone(self) -> "AIOFile":
         """
@@ -209,14 +196,14 @@ class AIOFile:
         calls will only decrease the clone count without
         really closing anything.
         """
-        async with self._clone_lock:
+        async with self._lock:
             self._clones += 1
             return self
 
     def fileno(self) -> int:
-        if self._file_obj is None:
-            raise asyncio.InvalidStateError("AIOFile closed")
-        return self._file_obj.fileno()
+        if self._fileno < 0:
+            raise asyncio.InvalidStateError(f"Not opened {self.__class__.__name__}")
+        return self._fileno
 
     def __await__(self) -> Generator[None, Any, "AIOFile"]:
         yield from self.open().__await__()
@@ -313,6 +300,10 @@ class AIOFile:
         return self._run_in_thread(
             os.ftruncate, self.fileno(), length,
         )
+
+    def __del__(self) -> None:
+        if self._fileno > 0:
+            os.close(self._fileno)
 
 
 ContextStoreType = Dict[asyncio.AbstractEventLoop, caio.AsyncioContext]
