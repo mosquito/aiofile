@@ -517,6 +517,19 @@ Async CSV Dict Reader
 
     asyncio.run(main())
 
+Limitations
+-----------
+
+The underlying library ``caio`` uses multiple implementations of asynchronous
+IO to ensure that it works across operating systems.
+
+This imposes a limitation on the mode of working with files; files are
+always opened in binary mode, and string encoding and decoding takes place
+in the library, not in the operating system.
+
+Thus the presence of ``b`` in the file opening mode determines the behavior
+of the ``read`` and ``write`` functions, while the file descriptor will
+always be opened in binary mode.
 
 .. _troubleshooting:
 
