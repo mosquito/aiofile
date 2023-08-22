@@ -94,13 +94,14 @@ class Writer:
         self.__aio_file = aio_file
         self.__lock = asyncio.Lock()
 
-    async def __call__(self, data: Union[str, bytes]) -> None:
+    async def __call__(self, data: Union[str, bytes]) -> int:
         async with self.__lock:
             if isinstance(data, str):
                 data = self.__aio_file.encode_bytes(data)
 
-            await self.__aio_file.write_bytes(data, self.__offset)
+            result = await self.__aio_file.write_bytes(data, self.__offset)
             self.__offset += len(data)
+            return result
 
 
 class LineReader(collections.abc.AsyncIterable):

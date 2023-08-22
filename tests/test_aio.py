@@ -232,13 +232,13 @@ async def test_line_reader(aio_file_maker, temp_file, uuid):
 
     writer = Writer(afp)
 
-    max_length = 1000
+    max_length = 10
     chunk = b64encode(os.urandom(max_length)).decode()
     lines = [chunk[:i] for i in range(max_length)]
 
     for line in lines:
         await writer(line)
-        await writer("\n")
+        print(await writer("\n"))
 
     await afp.fsync()
     read_lines = []

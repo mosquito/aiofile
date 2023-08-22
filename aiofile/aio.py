@@ -23,6 +23,9 @@ AIO_FILE_CLOSED = -2
 FileIOType = Union[TextIO, BinaryIO, IO]
 
 
+
+
+
 class FileMode(NamedTuple):
     readable: bool
     writable: bool
@@ -89,8 +92,11 @@ class FileMode(NamedTuple):
 
             if m == "b":
                 binary = True
-                if hasattr(os, "O_BINARY"):
-                    flags |= os.O_BINARY
+
+            # always add the binary flag because the asynchronous API only works with bytes,
+            # we must always open the file in binary mode.
+            if hasattr(os, "O_BINARY"):
+                flags |= os.O_BINARY
 
         if readable and writable:
             flags |= os.O_RDWR
