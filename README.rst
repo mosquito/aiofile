@@ -37,7 +37,7 @@ Features
 
 * Since version 2.0.0 using `caio`_, which contains linux ``libaio`` and two
   thread-based implementations (c-based and pure-python).
-* AIOFile has no internal pointer. You should pass ``offset`` and
+* ``AIOFile`` has no internal pointer. You should pass ``offset`` and
   ``chunk_size`` for each operation or use helpers (Reader or Writer).
   The simples way is to use ``async_open`` for creating object with
   file-like interface.
@@ -57,7 +57,7 @@ Limitations
 
 * Linux native AIO implementation is not able to open special files.
   Asynchronous operations against special fs like ``/proc/`` ``/sys/`` are not
-  supported by the kernel. It's not a `aiofile`s or `caio` issue.
+  supported by the kernel. It's not a ``aiofile`` or ``caio`` issue.
   In this cases, you might switch to thread-based implementations
   (see troubleshooting_ section).
   However, when used on supported file systems, the linux implementation has a
