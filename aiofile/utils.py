@@ -3,7 +3,7 @@ import collections.abc
 import io
 import os
 from abc import ABC, abstractmethod
-from pathlib import Path
+from pathlib import PurePath
 from types import MappingProxyType
 from typing import Any, Generator, Generic, Optional, Tuple, TypeVar, Union
 
@@ -334,15 +334,10 @@ class TextFileWrapper(FileIOWrapperBase):
 
 
 def async_open(
-    file_specifier: Union[str, Path, FileIOType],
+    file_specifier: Union[str, PurePath, FileIOType],
     mode: str = "r", *args: Any, **kwargs: Any
 ) -> Union[BinaryFileWrapper, TextFileWrapper]:
-    if isinstance(file_specifier, (str, Path)):
-        afp = AIOFile(str(file_specifier), mode, *args, **kwargs)
-    else:
-        if args:
-            raise ValueError("Arguments denied when IO[Any] opening.")
-        afp = AIOFile.from_fp(file_specifier, **kwargs)
+    afp = AIOFile(file_specifier, mode, *args, **kwargs)
 
     if not afp.mode.binary:
         return TextFileWrapper(afp)

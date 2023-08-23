@@ -1,10 +1,11 @@
 import asyncio
 import os
 import sys
+import warnings
 from concurrent.futures import Executor
 from functools import partial
 from os import strerror
-from pathlib import Path
+from pathlib import PurePath
 from typing import (
     IO, Any, Awaitable, BinaryIO, Callable, Dict, Generator, NamedTuple,
     Optional, TextIO, TypeVar, Union,
@@ -122,48 +123,32 @@ class AIOFile:
     mode: FileMode
 
     def __init__(
-        self, filename: Union[str, Path],
+        self, file_specifier: Union[str, PurePath, FileIOType],
         mode: str = "r", encoding: str = sys.getdefaultencoding(),
         context: Optional[AsyncioContextBase] = None,
         executor: Optional[Executor] = None,
     ):
         self.__context = context or get_default_context()
 
-        self._fname = str(filename)
+        self.__file_specifier = file_specifier
+        self.__is_fp = all((
+            hasattr(self.__file_specifier, "name"),
+            hasattr(self.__file_specifier, "mode"),
+            hasattr(self.__file_specifier, "fileno"),
+        ))
 
-        self.mode = FileMode.parse(mode)
+        if self.__is_fp:
+            self._fname = self.__file_specifier.name
+            self.mode = FileMode.parse(self.__file_specifier.mode)
+        else:
+            self._fname = self.__file_specifier
+            self.mode = FileMode.parse(mode)
 
         self._fileno = -1
         self._encoding = encoding
         self._executor = executor
         self._lock = asyncio.Lock()
         self._clones = 0
-
-    if hasattr(os, 'O_BINARY'):
-        # In windows, the file may already be opened in text mode, and you
-        # will have to reopen it in binary mode.
-        # Unlike unix windows does not allow you to delete an already
-        # opened file, so it is relatively safe to open a file by name.
-        @classmethod
-        async def from_fp(cls, fp: FileIOType, **kwargs: Any) -> "AIOFile":
-            afp = cls(fp.name, fp.mode, **kwargs)
-            afp._fileno = await afp._run_in_thread(
-                os.open, fp.name, afp.mode.flags
-            )
-            return afp
-    else:
-        @classmethod
-        async def from_fp(cls, fp: FileIOType, **kwargs: Any) -> "AIOFile":
-            afp = cls(fp.name, fp.mode, **kwargs)
-            afp._fileno = await afp._run_in_thread(os.dup, fp.fileno())
-            return afp
-
-    def _run_in_thread(
-            self, func: "Callable[..., _T]", *args: Any, **kwargs: Any
-    ) -> "asyncio.Future[_T]":
-        return self.__context.loop.run_in_executor(
-            self._executor, partial(func, *args, **kwargs),
-        )
 
     @property
     def name(self) -> str:
@@ -177,7 +162,40 @@ class AIOFile:
     def encoding(self) -> str:
         return self._encoding
 
+    @classmethod
+    def from_fp(cls, fp: FileIOType) -> "AIOFile":
+        warnings.warn(
+            "Classmethod is deprecated. Do not use this anymore. "
+            "Just pass file-like as a first argument",
+            DeprecationWarning
+        )
+        return cls(fp, mode=fp.mode)
+
+    if hasattr(os, 'O_BINARY'):
+        # In windows, the file may already be opened in text mode, and you
+        # will have to reopen it in binary mode.
+        # Unlike unix windows does not allow you to delete an already
+        # opened file, so it is relatively safe to open a file by name.
+        def _open_fp(self, fp: FileIOType) -> int:
+            return os.open(fp.name, self.mode.flags)
+    else:
+        def _open_fp(self, fp: FileIOType) -> int:
+            return os.dup(fp.fileno())
+
+    def _run_in_thread(
+            self, func: "Callable[..., _T]", *args: Any, **kwargs: Any
+    ) -> "asyncio.Future[_T]":
+        return self.__context.loop.run_in_executor(
+            self._executor, partial(func, *args, **kwargs),
+        )
+
     def __open(self) -> int:
+        if self.__is_fp:
+            result = self._open_fp(self.__file_specifier)
+            # remove linked object after first open
+            self.__file_specifier = self._fname
+            self.__is_fp = False
+            return result
         return os.open(self._fname, self.mode.flags)
 
     async def open(self) -> Optional[int]:
