@@ -284,8 +284,8 @@ async def test_truncate(aio_file_maker, temp_file):
 
 
 @pytest.mark.parametrize("size", [1, 2, 3, 5, 10, 20, 100, 1000, 2000, 5000])
-async def test_modes(size, aio_file_maker, tmpdir):
-    tmpfile = tmpdir.join("test.txt")
+async def test_modes(size, aio_file_maker, tmp_path):
+    tmpfile = tmp_path / "test.txt"
 
     async with aio_file_maker(tmpfile, "w") as afp:
         await afp.write("foo")
@@ -302,7 +302,7 @@ async def test_modes(size, aio_file_maker, tmpdir):
 
     data = dict((str(i), i)for i in range(size))
 
-    tmpfile = tmpdir.join("test.json")
+    tmpfile = tmp_path / "test.json"
     async with aio_file_maker(tmpfile, "w") as afp:
         await afp.write(json.dumps(data, indent=1))
 

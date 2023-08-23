@@ -129,20 +129,14 @@ class AIOFile:
         executor: Optional[Executor] = None,
     ):
         self.__context = context or get_default_context()
-
         self.__file_specifier = file_specifier
-        self.__is_fp = all((
-            hasattr(self.__file_specifier, "name"),
-            hasattr(self.__file_specifier, "mode"),
-            hasattr(self.__file_specifier, "fileno"),
-        ))
 
-        if self.__is_fp:
+        if isinstance(self.__file_specifier, (str, PurePath)):
+            self._fname = str(self.__file_specifier)
+            self.mode = FileMode.parse(mode)
+        else:
             self._fname = self.__file_specifier.name
             self.mode = FileMode.parse(self.__file_specifier.mode)
-        else:
-            self._fname = self.__file_specifier
-            self.mode = FileMode.parse(mode)
 
         self._fileno = -1
         self._encoding = encoding
@@ -190,13 +184,14 @@ class AIOFile:
         )
 
     def __open(self) -> int:
-        if self.__is_fp:
-            result = self._open_fp(self.__file_specifier)
-            # remove linked object after first open
-            self.__file_specifier = self._fname
-            self.__is_fp = False
-            return result
-        return os.open(self._fname, self.mode.flags)
+        if isinstance(self.__file_specifier, (str, PurePath)):
+            return os.open(self._fname, self.mode.flags)
+
+        result = self._open_fp(self.__file_specifier)
+        # remove linked object after first open
+        self.__file_specifier = self._fname
+        self.__is_fp = False
+        return result
 
     async def open(self) -> Optional[int]:
         async with self._lock:
