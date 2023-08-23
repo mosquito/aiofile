@@ -124,7 +124,7 @@ class AIOFile:
 
     def __init__(
         self, file_specifier: Union[str, PurePath, FileIOType],
-        mode: str = "r", encoding: str = sys.getdefaultencoding(),
+        mode: str = '', encoding: str = sys.getdefaultencoding(),
         context: Optional[AsyncioContextBase] = None,
         executor: Optional[Executor] = None,
     ):
@@ -133,10 +133,10 @@ class AIOFile:
 
         if isinstance(self.__file_specifier, (str, PurePath)):
             self._fname = str(self.__file_specifier)
-            self.mode = FileMode.parse(mode)
+            self.mode = FileMode.parse(mode or "r")
         else:
             self._fname = self.__file_specifier.name
-            self.mode = FileMode.parse(self.__file_specifier.mode)
+            self.mode = FileMode.parse(mode or self.__file_specifier.mode)
 
         self._fileno = -1
         self._encoding = encoding
