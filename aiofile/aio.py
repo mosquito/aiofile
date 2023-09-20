@@ -1,13 +1,14 @@
 import asyncio
 import os
-from collections import namedtuple
+import sys
+import warnings
 from concurrent.futures import Executor
 from functools import partial
 from os import strerror
-from pathlib import Path
+from pathlib import PurePath
 from typing import (
-    Any, Awaitable, BinaryIO, Callable, Dict, Generator, Optional, TextIO,
-    TypeVar, Union,
+    IO, Any, Awaitable, BinaryIO, Callable, Dict, Generator, NamedTuple,
+    Optional, TextIO, TypeVar, Union,
 )
 from weakref import finalize
 
@@ -20,140 +21,128 @@ _T = TypeVar("_T")
 AIO_FILE_NOT_OPENED = -1
 AIO_FILE_CLOSED = -2
 
-FileIOType = Union[TextIO, BinaryIO]
-
-FileMode = namedtuple(
-    "FileMode", (
-        "readable",
-        "writable",
-        "plus",
-        "appending",
-        "created",
-        "flags",
-        "binary",
-    ),
-)
+FileIOType = Union[TextIO, BinaryIO, IO]
 
 
-def parse_mode(mode: str) -> FileMode:    # noqa: C901
-    """ Rewritten from `cpython fileno`_
+class FileMode(NamedTuple):
+    readable: bool
+    writable: bool
+    plus: bool
+    appending: bool
+    created: bool
+    flags: int
+    binary: bool
 
-    .. _cpython fileio: https://bit.ly/2JY2cnp
-    """
+    @classmethod
+    def parse(cls, mode: str) -> "FileMode":    # noqa: C901
+        """ Rewritten from `cpython fileno`_
 
-    flags = os.O_RDONLY
+        .. _cpython fileio: https://bit.ly/2JY2cnp
+        """
 
-    rwa = False
-    writable = False
-    readable = False
-    plus = False
-    appending = False
-    created = False
-    binary = False
+        flags = os.O_RDONLY
 
-    for m in mode:
-        if m == "x":
-            rwa = True
-            created = True
-            writable = True
-            flags |= os.O_EXCL | os.O_CREAT
+        rwa = False
+        writable = False
+        readable = False
+        plus = False
+        appending = False
+        created = False
+        binary = False
 
-        if m == "r":
-            if rwa:
-                raise Exception("Bad mode")
+        for m in mode:
+            if m == "x":
+                rwa = True
+                created = True
+                writable = True
+                flags |= os.O_EXCL | os.O_CREAT
 
-            rwa = True
-            readable = True
+            if m == "r":
+                if rwa:
+                    raise Exception("Bad mode")
 
-        if m == "w":
-            if rwa:
-                raise Exception("Bad mode")
+                rwa = True
+                readable = True
 
-            rwa = True
-            writable = True
+            if m == "w":
+                if rwa:
+                    raise Exception("Bad mode")
 
-            flags |= os.O_CREAT | os.O_TRUNC
+                rwa = True
+                writable = True
 
-        if m == "a":
-            if rwa:
-                raise Exception("Bad mode")
-            rwa = True
-            writable = True
-            appending = True
-            flags |= os.O_CREAT | os.O_APPEND
+                flags |= os.O_CREAT | os.O_TRUNC
 
-        if m == "+":
-            if plus:
-                raise Exception("Bad mode")
-            readable = True
-            writable = True
-            plus = True
+            if m == "a":
+                if rwa:
+                    raise Exception("Bad mode")
+                rwa = True
+                writable = True
+                appending = True
+                flags |= os.O_CREAT | os.O_APPEND
 
-        if m == "b":
-            binary = True
-            if hasattr(os, "O_BINARY"):
-                flags |= os.O_BINARY
+            if m == "+":
+                if plus:
+                    raise Exception("Bad mode")
+                readable = True
+                writable = True
+                plus = True
 
-    if readable and writable:
-        flags |= os.O_RDWR
+            if m == "b":
+                binary = True
 
-    elif readable:
-        flags |= os.O_RDONLY
-    else:
-        flags |= os.O_WRONLY
+        if hasattr(os, "O_BINARY"):
+            # always add the binary flag because the asynchronous
+            # API only works with bytes, we must always open the
+            # file in binary mode.
+            flags |= os.O_BINARY
 
-    return FileMode(
-        readable=readable,
-        writable=writable,
-        plus=plus,
-        appending=appending,
-        created=created,
-        flags=flags,
-        binary=binary,
-    )
+        if readable and writable:
+            flags |= os.O_RDWR
+
+        elif readable:
+            flags |= os.O_RDONLY
+        else:
+            flags |= os.O_WRONLY
+
+        return cls(
+            readable=readable,
+            writable=writable,
+            plus=plus,
+            appending=appending,
+            created=created,
+            flags=flags,
+            binary=binary,
+        )
 
 
 class AIOFile:
-    _file_obj: Optional[FileIOType]
-    _file_obj_owner: bool
+    _fileno: int
     _encoding: str
     _executor: Optional[Executor]
     mode: FileMode
-    __open_result: "Optional[asyncio.Future[FileIOType]]"
 
     def __init__(
-        self, filename: Union[str, Path],
-        mode: str = "r", encoding: str = "utf-8",
+        self, file_specifier: Union[str, PurePath, FileIOType],
+        mode: str = '', encoding: str = sys.getdefaultencoding(),
         context: Optional[AsyncioContextBase] = None,
         executor: Optional[Executor] = None,
     ):
         self.__context = context or get_default_context()
-        self.__open_result = None
+        self.__file_specifier = file_specifier
 
-        self._fname = str(filename)
-        self._open_mode = mode
+        if isinstance(self.__file_specifier, (str, PurePath)):
+            self._fname = str(self.__file_specifier)
+            self.mode = FileMode.parse(mode or "r")
+        else:
+            self._fname = self.__file_specifier.name
+            self.mode = FileMode.parse(mode or self.__file_specifier.mode)
 
-        self.mode = parse_mode(mode)
-
-        self._file_obj = None
-        self._file_obj_owner = True
+        self._fileno = -1
         self._encoding = encoding
         self._executor = executor
-
-    @classmethod
-    def from_fp(cls, fp: FileIOType, **kwargs: Any) -> "AIOFile":
-        afp = cls(fp.name, fp.mode, **kwargs)
-        afp._file_obj = fp
-        afp._open_mode = fp.mode
-        afp._file_obj_owner = False
-        return afp
-
-    def _run_in_thread(
-            self, func: "Callable[..., _T]", *args: Any, **kwargs: Any
-    ) -> "asyncio.Future[_T]":
-        return self.__context.loop.run_in_executor(
-            self._executor, partial(func, *args, **kwargs),
-        )
+        self._lock = asyncio.Lock()
+        self._clones = 0
 
     @property
     def name(self) -> str:
@@ -167,41 +156,83 @@ class AIOFile:
     def encoding(self) -> str:
         return self._encoding
 
+    @classmethod
+    def from_fp(cls, fp: FileIOType) -> "AIOFile":
+        warnings.warn(
+            "Classmethod is deprecated. Do not use this anymore. "
+            "Just pass file-like as a first argument",
+            DeprecationWarning
+        )
+        return cls(fp, mode=fp.mode)
+
+    if hasattr(os, 'O_BINARY'):
+        # In windows, the file may already be opened in text mode, and you
+        # will have to reopen it in binary mode.
+        # Unlike unix windows does not allow you to delete an already
+        # opened file, so it is relatively safe to open a file by name.
+        def _open_fp(self, fp: FileIOType) -> int:
+            return os.open(fp.name, self.mode.flags)
+    else:
+        def _open_fp(self, fp: FileIOType) -> int:
+            return os.dup(fp.fileno())
+
+    def _run_in_thread(
+            self, func: "Callable[..., _T]", *args: Any, **kwargs: Any
+    ) -> "asyncio.Future[_T]":
+        return self.__context.loop.run_in_executor(
+            self._executor, partial(func, *args, **kwargs),
+        )
+
+    def __open(self) -> int:
+        if isinstance(self.__file_specifier, (str, PurePath)):
+            return os.open(self._fname, self.mode.flags)
+
+        result = self._open_fp(self.__file_specifier)
+        # remove linked object after first open
+        self.__file_specifier = self._fname
+        self.__is_fp = False
+        return result
+
     async def open(self) -> Optional[int]:
-        if self._file_obj is not None:
-            if self._file_obj.closed:
-                raise asyncio.InvalidStateError("AIOFile closed")
-            return None
-
-        if self.__open_result is None:
-            self.__open_result = self._run_in_thread(
-                open,
-                self._fname,
-                self._open_mode,
-            )
-            self._file_obj = await self.__open_result
-            self.__open_result = None
-            return self._file_obj.fileno()
-
-        await self.__open_result
-        return None
+        async with self._lock:
+            if self._fileno > 0:
+                return None
+            self._fileno = await self._run_in_thread(self.__open)
+            return self._fileno
 
     def __repr__(self) -> str:
         return "<AIOFile: %r>" % self._fname
 
     async def close(self) -> None:
-        if self._file_obj is None or not self._file_obj_owner:
-            return
+        async with self._lock:
+            if self._fileno < 0:
+                return
 
-        if self.mode.writable:
-            await self.fdsync()
+            if self._clones > 0:
+                self._clones -= 1
+                return
 
-        await self._run_in_thread(self._file_obj.close)
+            if self.mode.writable:
+                await self.fdsync()
+
+            await self._run_in_thread(os.close, self._fileno)
+            self._fileno = -1
+
+    async def clone(self) -> "AIOFile":
+        """
+        Increases the clone count by one, as long as the clone
+        count is greater than zero, all ``self.close()``
+        calls will only decrease the clone count without
+        really closing anything.
+        """
+        async with self._lock:
+            self._clones += 1
+            return self
 
     def fileno(self) -> int:
-        if self._file_obj is None:
-            raise asyncio.InvalidStateError("AIOFile closed")
-        return self._file_obj.fileno()
+        if self._fileno < 0:
+            raise asyncio.InvalidStateError(f"Not opened {self.__class__.__name__}")
+        return self._fileno
 
     def __await__(self) -> Generator[None, Any, "AIOFile"]:
         yield from self.open().__await__()
@@ -218,17 +249,16 @@ class AIOFile:
         data = await self.read_bytes(size, offset)
         return data if self.mode.binary else self.decode_bytes(data)
 
+    async def stat(self) -> os.stat_result:
+        return await self._run_in_thread(os.fstat, self.fileno())
+
     async def read_bytes(self, size: int = -1, offset: int = 0) -> bytes:
         if size < -1:
             raise ValueError("Unsupported value %d for size" % size)
 
         if size == -1:
-            size = (
-                await self._run_in_thread(
-                    os.stat,
-                    self.fileno(),
-                )
-            ).st_size
+            stat = await self.stat()
+            size = stat.st_size
 
         return await self.__context.read(size, self.fileno(), offset)
 
@@ -298,6 +328,10 @@ class AIOFile:
         return self._run_in_thread(
             os.ftruncate, self.fileno(), length,
         )
+
+    def __del__(self) -> None:
+        if self._fileno > 0:
+            os.close(self._fileno)
 
 
 ContextStoreType = Dict[asyncio.AbstractEventLoop, caio.AsyncioContext]

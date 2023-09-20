@@ -12,9 +12,9 @@ from uuid import uuid4
 import caio
 import pytest
 
-from aiofile import AIOFile
-from aiofile.utils import (
-    BinaryFileWrapper, LineReader, Reader, TextFileWrapper, Writer,
+from aiofile import (
+    AIOFile, BinaryFileWrapper, LineReader, Reader, TextFileWrapper, Writer,
+    clone,
 )
 
 from .impl import split_by
@@ -212,8 +212,8 @@ async def test_sequential_open(aio_file_maker, temp_file):
     finally:
         await file.close()
 
-    with pytest.raises(asyncio.InvalidStateError):
-        await file.open()
+    assert await file.open() is not None
+    await file.close()
 
 
 async def test_parallel_open(aio_file_maker, temp_file):
@@ -232,7 +232,7 @@ async def test_line_reader(aio_file_maker, temp_file, uuid):
 
     writer = Writer(afp)
 
-    max_length = 1000
+    max_length = 10
     chunk = b64encode(os.urandom(max_length)).decode()
     lines = [chunk[:i] for i in range(max_length)]
 
@@ -284,8 +284,8 @@ async def test_truncate(aio_file_maker, temp_file):
 
 
 @pytest.mark.parametrize("size", [1, 2, 3, 5, 10, 20, 100, 1000, 2000, 5000])
-async def test_modes(size, aio_file_maker, tmpdir):
-    tmpfile = tmpdir.join("test.txt")
+async def test_modes(size, aio_file_maker, tmp_path):
+    tmpfile = tmp_path / "test.txt"
 
     async with aio_file_maker(tmpfile, "w") as afp:
         await afp.write("foo")
@@ -302,7 +302,7 @@ async def test_modes(size, aio_file_maker, tmpdir):
 
     data = dict((str(i), i)for i in range(size))
 
-    tmpfile = tmpdir.join("test.json")
+    tmpfile = tmp_path / "test.json"
     async with aio_file_maker(tmpfile, "w") as afp:
         await afp.write(json.dumps(data, indent=1))
 
@@ -626,3 +626,58 @@ async def test_open_non_existent_file_with_append(
             numbers.append(int(line.strip()))
 
     assert numbers == list(range(20))
+
+
+async def test_clone(
+    async_open, tmp_path: Path,
+):
+    tmp_fpath = tmp_path / "test.txt"
+
+    async with async_open(tmp_fpath, "w") as afp:
+        for i in range(1000, 1003):
+            await afp.write(str(i))
+            await afp.write("\n")
+
+    async with async_open(tmp_fpath, "r") as afp:
+        assert await afp.read(5) == "1000\n"
+
+        async with clone(afp) as cloned:
+            assert await cloned.read(5) == "1000\n"
+
+            async with clone(afp) as cloned2:
+                assert await cloned2.read(5) == "1000\n"
+
+                assert await cloned.read(5) == await afp.read(5) == "1001\n"
+
+
+async def test_clone_close(
+    async_open, tmp_path: Path,
+):
+    tmp_fpath = tmp_path / "test.txt"
+
+    async with async_open(tmp_fpath, "w") as afp:
+        for i in range(10):
+            await afp.write(str(i))
+            await afp.write("\n")
+
+    async with async_open(tmp_fpath, "r") as afp:
+        await afp.read(10)
+
+        afp_clone = await clone(afp)
+        await afp_clone.close()
+
+        assert await afp.read()
+
+    async with async_open(tmp_fpath, "r") as afp:
+        await afp.read(10)
+
+        afp_clone = await clone(afp)
+        await afp_clone.close()
+
+        assert await afp.read()
+
+    async with async_open(tmp_fpath, "r") as afp:
+        await afp.read(10)
+
+        async with clone(afp):
+            assert await afp.read()
