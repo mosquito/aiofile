@@ -213,7 +213,7 @@ class FileIOWrapperBase(ABC):
         return LineReader(self.file)
 
     def iter_chunked(self, chunk_size: int = Reader.CHUNK_SIZE) -> Reader:
-        return Reader(self.file, chunk_size=chunk_size)
+        return Reader(self.file, chunk_size=chunk_size, offset=self._offset)
 
 
 class BinaryFileWrapper(FileIOWrapperBase):
