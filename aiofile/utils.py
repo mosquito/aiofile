@@ -123,7 +123,6 @@ class LineReader(collections.abc.AsyncIterable):
         )
 
     async def readline(self) -> Union[str, bytes]:
-        self._buffer = cast(Union[io.StringIO, io.BytesIO], self._buffer)
         while True:
             self._buffer.seek(0)
             line = self._buffer.readline()
