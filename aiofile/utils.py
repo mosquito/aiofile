@@ -5,7 +5,7 @@ import os
 from abc import ABC, abstractmethod
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any, Generator, Tuple, Union, cast
+from typing import Any, Generator, Tuple, Union
 
 from .aio import AIOFile, FileIOType
 
