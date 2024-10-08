@@ -124,29 +124,30 @@ class LineReader(collections.abc.AsyncIterable):
 
     async def readline(self) -> Union[str, bytes]:
         while True:
-            chunk = await self.__reader.read_chunk()
-
-            if chunk:
-                if self.linesep not in chunk:   # type: ignore
-                    self._buffer.write(chunk)
-                    continue
-
-                self._buffer.write(chunk)
-
-            self._buffer.seek(0)
             line = self._buffer.readline()
-            tail = self._buffer.read()
+            if line and line.endswith(self.linesep):
+                return line
 
-            self._buffer.seek(0)
+            buffer_remainder = line + self._buffer.read()
             self._buffer.truncate(0)
-            self._buffer.write(tail)
+            self._buffer.seek(0)
 
-            return line
+            # No line in buffer, read more data
+            chunk = await self.__reader.read_chunk()
+            if not chunk:
+                # No more data to read, return any remaining content in the buffer
+                return buffer_remainder
+            # We have more data to read, write it to the buffer and handle it in the next iteration
+            self._buffer.write(buffer_remainder)
+            self._buffer.write(chunk)
+            self._buffer.seek(0)
 
     async def __anext__(self) -> Union[bytes, str]:
         line = await self.readline()
 
         if not line:
+            # We are finished, close the buffer and raise StopAsyncIteration
+            self._buffer.close()
             raise StopAsyncIteration(line)
 
         return line
