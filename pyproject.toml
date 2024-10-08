@@ -45,6 +45,9 @@ pytest = ">=8.2.0,<8.3.0"
 aiomisc-pytest = "^1.2.1"
 pytest-cov = "^5.0.0"
 coveralls = "<4"
+pylama = "^8.4.1"
+setuptools = "^75.1.0"
+mypy = "^1.11.2"
 
 [build-system]
 requires = ["poetry-core"]
@@ -64,12 +67,22 @@ strict_optional = true
 warn_redundant_casts = true
 warn_unused_configs = true
 warn_unused_ignores = true
+files = [
+    "aiofile",
+    "tests",
+]
 
-[tool.mypy.tests]
-ignore_errors = true
+[[tool.mypy.overrides]]
+module = ["tests.*"]
+check_untyped_defs = true
+disallow_incomplete_defs = false
+disallow_untyped_calls = false
+disallow_untyped_decorators = false
+disallow_untyped_defs = false
+warn_unused_ignores = false
 
 [tool.pylama]
-skip = ["env*", ".tox*", "*build*"]
+skip = ["*env*", ".*", "*build*"]
 
 [tool.pylama.pycodestyle]
 max_line_length = 80
