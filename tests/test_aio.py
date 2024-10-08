@@ -9,8 +9,8 @@ from random import shuffle
 from unittest.mock import Mock, call
 from uuid import uuid4
 
-import caio
-import pytest
+import caio  # type: ignore
+import pytest  # type: ignore
 
 from aiofile import AIOFile
 from aiofile.utils import (
@@ -235,6 +235,8 @@ async def test_line_reader(aio_file_maker, temp_file, uuid):
     max_length = 1000
     chunk = b64encode(os.urandom(max_length)).decode()
     lines = [chunk[:i] for i in range(max_length)]
+
+    line: str | bytes
 
     for line in lines:
         await writer(line)

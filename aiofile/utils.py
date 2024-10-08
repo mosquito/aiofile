@@ -335,7 +335,7 @@ class TextFileWrapper(FileIOWrapperBase):
 
 def async_open(
     file_specifier: Union[str, Path, FileIOType],
-    mode: str = "r", *args: Any, **kwargs: Any
+    mode: str = "r", *args: Any, **kwargs: Any,
 ) -> Union[BinaryFileWrapper, TextFileWrapper]:
     if isinstance(file_specifier, (str, Path)):
         afp = AIOFile(str(file_specifier), mode, *args, **kwargs)

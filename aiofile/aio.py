@@ -149,7 +149,7 @@ class AIOFile:
         return afp
 
     def _run_in_thread(
-            self, func: "Callable[..., _T]", *args: Any, **kwargs: Any
+            self, func: "Callable[..., _T]", *args: Any, **kwargs: Any,
     ) -> "asyncio.Future[_T]":
         return self.__context.loop.run_in_executor(
             self._executor, partial(func, *args, **kwargs),
