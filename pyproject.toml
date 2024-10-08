@@ -1,0 +1,76 @@
+[tool.poetry]
+name = "aiofile"
+version = "3.9.0"
+description = "Asynchronous file operations."
+license = "Apache-2.0"
+authors = ["Dmitry Orlov <me@mosquito.su>"]
+readme = "README.md"
+homepage = "http://github.com/mosquito/aiofile"
+keywords = ["aio", "python", "asyncio", "fileio", "io"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Education",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: Apache Software License",
+    "Natural Language :: English",
+    "Natural Language :: Russian",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS :: MacOS X",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Topic :: Software Development :: Libraries",
+    "Topic :: System",
+    "Topic :: System :: Operating System",
+]
+packages = [
+    { include = "aiofile" },
+]
+
+[tool.poetry.dependencies]
+python = ">=3.8,<4"
+caio = "~0.9.0"
+
+[tool.poetry.group.dev.dependencies]
+markdown-pytest = "^0.3.2"
+pytest = ">=8.2.0,<8.3.0"
+aiomisc-pytest = "^1.2.1"
+pytest-cov = "^5.0.0"
+coveralls = "<4"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.mypy]
+check_untyped_defs = true
+disallow_any_generics = false
+disallow_incomplete_defs = true
+disallow_subclassing_any = true
+disallow_untyped_calls = true
+disallow_untyped_decorators = true
+disallow_untyped_defs = true
+follow_imports = "silent"
+no_implicit_reexport = true
+strict_optional = true
+warn_redundant_casts = true
+warn_unused_configs = true
+warn_unused_ignores = true
+
+[tool.mypy.tests]
+ignore_errors = true
+
+[tool.pylama]
+skip = ["env*", ".tox*", "*build*"]
+
+[tool.pylama.pycodestyle]
+max_line_length = 80
+

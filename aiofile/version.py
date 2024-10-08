@@ -1,15 +1,12 @@
-author_info = (
-    ("Dmitry Orlov", "me@mosquito.su"),
-)
+import importlib.metadata
 
-project_home = "http://github.com/mosquito/aiofile"
+package_metadata = importlib.metadata.metadata('aiofile')
 
-package_info = "Asynchronous file operations."
-package_license = "Apache 2"
-
-team_email = "me@mosquito.su"
-
-version_info = (3, 8, 9)
-
-__author__ = ", ".join("{} <{}>".format(*info) for info in author_info)
-__version__ = ".".join(map(str, version_info))
+__author__ = package_metadata['Author']
+__version__ = package_metadata['Version']
+author_info = [(package_metadata['Author'], package_metadata['Author-email'])]
+package_info = package_metadata['Summary']
+package_license = package_metadata['License']
+project_home = package_metadata['Home-page']
+team_email = package_metadata['Author-email']
+version_info = tuple(map(int, __version__.split('.')))
