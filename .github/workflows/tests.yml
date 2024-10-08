@@ -44,9 +44,6 @@ jobs:
 
       matrix:
         include:
-          - python-versions: 3.7
-            toxenv: py37
-            os: ubuntu-latest
           - python-versions: 3.8
             toxenv: py38
             os: ubuntu-latest
@@ -57,26 +54,26 @@ jobs:
             toxenv: py310
             os: ubuntu-latest
           - python-versions: "3.11"
-            toxenv: py310
+            toxenv: py311
             os: ubuntu-latest
-          - python-versions: 3.7
-            toxenv: py37
-            os: macos-latest
-          - python-versions: 3.8
-            toxenv: py38
-            os: macos-latest
-          - python-versions: 3.9
-            toxenv: py39
-            os: macos-latest
+          - python-versions: "3.12"
+            toxenv: py312
+            os: ubuntu-latest
+          - python-versions: "3.13.0-rc.3"
+            toxenv: py313
+            os: ubuntu-latest
           - python-versions: "3.10"
             toxenv: py310
             os: macos-latest
           - python-versions: "3.11"
             toxenv: py311
             os: macos-latest
-          - python-versions: 3.7
-            toxenv: py37
-            os: windows-latest
+          - python-versions: "3.12"
+            toxenv: py312
+            os: macos-latest
+          - python-versions: "3.13.0-rc.3"
+            toxenv: py313
+            os: macos-latest
           - python-versions: 3.8
             toxenv: py38
             os: windows-latest
@@ -88,16 +85,22 @@ jobs:
             os: windows-latest
           - python-versions: "3.11"
             toxenv: py311
+            os: windows-latest
+          - python-versions: "3.12"
+            toxenv: py312
+            os: windows-latest
+          - python-versions: "3.13.0-rc.3"
+            toxenv: py313
             os: windows-latest
 
     needs: lint
     runs-on: ${{ matrix.os }}
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
 
       - name: Setting up python ${{ matrix.python-versions }}
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-versions }}
           architecture: x64
@@ -107,6 +110,9 @@ jobs:
 
       - name: tox
         run: tox
+
+      - name: coveralls
+        run: coveralls || true
         env:
           COVERALLS_PARALLEL: 'true'
           COVERALLS_SERVICE_NAME: github
