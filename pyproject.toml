@@ -34,6 +34,9 @@ classifiers = [
 packages = [
     { include = "aiofile" },
 ]
+include = [
+    { path = "tests", format = "sdist" }
+]
 
 [tool.poetry.dependencies]
 python = ">=3.8,<4"
