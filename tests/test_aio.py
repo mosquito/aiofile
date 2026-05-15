@@ -190,10 +190,10 @@ async def test_parallel_writer_ordering(
     await asyncio.gather(*futures)
     await w_file.fsync()
 
-    result = b""
+    result: bytes = b""
 
     async for chunk in Reader(r_file, chunk_size=chunk_size):
-        result += chunk
+        result += chunk  # type: ignore[operator]
 
     assert data == result
 

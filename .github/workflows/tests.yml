@@ -1,4 +1,4 @@
-name: tox
+name: ci
 
 on:
   push:
@@ -22,7 +22,7 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           python-version: "3.12"
-          enable-caching: true
+          enable-cache: true
 
       - name: Install dependencies
         run: uv sync
@@ -65,7 +65,6 @@ jobs:
           - python-version: "3.14"
             os: windows-latest
 
-    needs: lint
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -74,7 +73,7 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           python-version: ${{ matrix.python-version }}
-          enable-caching: true
+          enable-cache: true
 
       - name: Install dependencies
         run: uv sync
