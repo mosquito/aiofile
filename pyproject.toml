@@ -46,7 +46,7 @@ dev = [
     "pytest-cov>=5.0.0,<6",
     "coveralls<4",
     "pylama>=8.4.1,<9",
-    "setuptools>=75.1.0,<76",
+    "setuptools>=75.1.0,<79",
     "mypy>=1.11.2,<2",
 ]
 
