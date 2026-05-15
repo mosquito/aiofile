@@ -1,9 +1,8 @@
 name: publish
 
 on:
-  push:
-    tags:
-      - "[0-9]*"
+  release:
+    types: [published]
 
 jobs:
   sdist:
