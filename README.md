@@ -1,65 +1,54 @@
 # AIOFile
 
-[![Github Actions](https://github.com/mosquito/aiofile/workflows/tox/badge.svg)](https://github.com/mosquito/aiofile/actions?query=branch%3Amaster) [![Latest Version](https://img.shields.io/pypi/v/aiofile.svg)](https://pypi.python.org/pypi/aiofile/) [![Wheel](https://img.shields.io/pypi/wheel/aiofile.svg)](https://pypi.python.org/pypi/aiofile/) [![Python Versions](https://img.shields.io/pypi/pyversions/aiofile.svg)](https://pypi.python.org/pypi/aiofile/) [![License](https://img.shields.io/pypi/l/aiofile.svg)](https://pypi.python.org/pypi/aiofile/) [![Coverage Status](https://coveralls.io/repos/github/mosquito/aiofile/badge.svg?branch=master)](https://coveralls.io/github/mosquito/aiofile?branch=master)
+[![Github Actions](https://github.com/mosquito/aiofile/workflows/ci/badge.svg)](https://github.com/mosquito/aiofile/actions?query=workflow%3Aci) [![Latest Version](https://img.shields.io/pypi/v/aiofile.svg)](https://pypi.python.org/pypi/aiofile/) [![Python Versions](https://img.shields.io/pypi/pyversions/aiofile.svg)](https://pypi.python.org/pypi/aiofile/) [![License](https://img.shields.io/pypi/l/aiofile.svg)](https://pypi.python.org/pypi/aiofile/) [![Coverage Status](https://coveralls.io/repos/github/mosquito/aiofile/badge.svg?branch=master)](https://coveralls.io/github/mosquito/aiofile?branch=master)
 
 Real asynchronous file operations with asyncio support.
 
-## Status
-
-Development - Stable
-
 ## Features
 
-* Since version 2.0.0 using [caio](https://pypi.org/project/caio), which contains linux `libaio` and two
-  thread-based implementations (c-based and pure-python).
-* AIOFile has no internal pointer. You should pass `offset` and
-  `chunk_size` for each operation or use helpers (Reader or Writer).
-  The simplest way is to use `async_open` for creating object with
-  file-like interface.
-* For Linux using implementation based on [libaio](https://pagure.io/libaio).
-* For POSIX (MacOS X and optional Linux) using implementation
-  based on [threadpool](https://github.com/mbrossard/threadpool/).
-* Otherwise using pure-python thread-based implementation.
-* Implementation chooses automatically depending on system compatibility.
+* Since version 2.0.0, uses [caio](https://pypi.org/project/caio), which provides multiple
+  async I/O backends:
+  * **Linux io_uring** — the modern, high-performance Linux kernel AIO interface.
+  * **Linux libaio** — the classic kernel AIO mechanism via [libaio](https://pagure.io/libaio).
+  * **Thread-based (C)** — a [threadpool](https://github.com/mbrossard/threadpool/)-backed
+    implementation for POSIX systems (macOS, Linux).
+  * **Pure Python** — a thread-based fallback for any platform.
+* The best available backend is chosen automatically based on system compatibility.
+* `AIOFile` has no internal file pointer. Pass `offset` and `chunk_size` to each operation,
+  or use the `Reader`/`Writer` helpers. For a file-like interface, use `async_open`.
 
 ## Limitations
 
-* Linux native AIO implementation is not able to open special files.
-  Asynchronous operations against special fs like `/proc/` `/sys/` are not
-  supported by the kernel. It's not a aiofile's or caio issue.
-  In these cases, you might switch to thread-based implementations
-  (see [Troubleshooting](#troubleshooting) section).
-  However, when used on supported file systems, the linux implementation has a
-  smaller overhead and is preferred but it's not a silver bullet.
+* The Linux native AIO and io_uring backends cannot open special files.
+  Asynchronous operations against special filesystems such as `/proc/` or `/sys/` are not
+  supported by the kernel — this is neither an aiofile nor a caio issue.
+  In such cases, switch to a thread-based implementation
+  (see the [Troubleshooting](#troubleshooting) section).
 
 ## Code examples
 
-All code examples require Python 3.6+.
+All code examples require Python 3.11+.
 
 ### High-level API
 
 #### `async_open` helper
 
-Helper mimics python file-like objects, it returns file-like
-objects with similar but async methods.
+This helper mimics Python's file-like objects, returning an object with
+equivalent asynchronous methods.
 
 Supported methods:
 
-* `async def read(length = -1)` - reading chunk from file, when length is
-  `-1`, will be reading file to the end.
-* `async def write(data)` - writing chunk to file
-* `def seek(offset)` - setting file pointer position
-* `def tell()` - returns current file pointer position
-* `async def readline(size=-1, newline="\n")` - read chunks until
-  newline or EOF. Since version 3.7.0 `__aiter__` returns `LineReader`.
-
-  This method is suboptimal for small lines because it doesn't reuse read buffer.
-  When you want to read file by lines please avoid using `async_open`
-  use `LineReader` instead.
-* `def __aiter__() -> LineReader` - iterator over lines.
-* `def iter_chunked(chunk_size: int = 32768) -> Reader` - iterator over
-  chunks.
-* `.file` property contains AIOFile object
+* `async def read(length=-1)` — reads a chunk from the file; `-1` reads to the end.
+* `async def write(data)` — writes a chunk to the file.
+* `def seek(offset)` — sets the file pointer position.
+* `def tell()` — returns the current file pointer position.
+* `async def readline(size=-1, newline="\n")` — reads until a newline or EOF.
+  Since version 3.7.0, `__aiter__` returns a `LineReader`.
+  This method is suboptimal for small lines because it does not reuse the read buffer —
+  prefer `LineReader` when reading line by line.
+* `def __aiter__() -> LineReader` — iterator over lines.
+* `def iter_chunked(chunk_size: int = 32768) -> Reader` — iterator over chunks.
+* `.file` — the underlying `AIOFile` object.
 
 Basic example:
 
@@ -166,7 +155,7 @@ async def main(arguments):
 asyncio.run(main(parser.parse_args()))
 ```
 
-Example with opening already open file pointer:
+Example with opening an already-open file pointer:
 
 ```python
 import asyncio
@@ -184,9 +173,9 @@ with open("test.txt", "w+") as fp:
     asyncio.run(main(fp))
 ```
 
-Linux native aio doesn't support reading and writing special files
-(e.g. procfs/sysfs/unix pipes/etc.), so you can perform operations with
-these files using compatible context objects.
+Linux native AIO and io_uring do not support reading or writing special files
+(procfs, sysfs, Unix pipes, etc.), so operations on these files require
+a compatible context object.
 
 ```python
 import asyncio
@@ -223,10 +212,10 @@ asyncio.run(main())
 
 ### `clone` helper
 
-Asynchronous context at a low level supports a limited number of concurrency
-operations, no matter how many file descriptors are open. This means that you
-can make a second file-like object with its own offset for one descriptor
-without opening the file several times.
+An asynchronous context supports a limited number of concurrent operations at the low level,
+regardless of how many file descriptors are open. `clone` lets you create a second file-like
+object with its own independent offset from a single descriptor, without opening the file
+multiple times.
 
 ```python
 """
@@ -266,23 +255,18 @@ async def main():
 asyncio.run(main())
 ```
 
-> **Note:** This will most likely perform poorly on Windows, so if that's
-> your target platform this optimization may not be worth it.
+> **Note:** This will likely perform poorly on Windows, so if that is
+> your target platform, this optimization may not be worth it.
 
 ### Low-level API
 
-The `AIOFile` class is a low-level interface for asynchronous file operations, and the read and write methods accept
-an `offset=0` in bytes at which the operation will be performed.
+The `AIOFile` class is a low-level interface for asynchronous file operations. Its `read` and
+`write` methods accept an `offset=0` (in bytes) at which the operation is performed.
 
-This allows you to do many independent IO operations on a once open file without moving the virtual carriage.
-
-For example, you may make 10 concurrent HTTP requests by specifying the `Range` header, and asynchronously write
-one opened file, while the offsets must either be calculated manually, or use 10 instances of `Writer` with
-specified initial offsets.
-
-In order to provide sequential reading and writing, there is `Writer`, `Reader` and `LineReader`. Keep in mind
-`async_open` is not the same as AIOFile, it provides a similar interface for file operations, it simulates methods
-like read or write as it is implemented in the built-in open.
+This allows many independent I/O operations on a single open file without an internal pointer.
+For sequential reading and writing, use `Writer`, `Reader`, and `LineReader`. Note that
+`async_open` is not the same as `AIOFile`: it wraps it to provide a file-like interface
+similar to the built-in `open`.
 
 ```python
 import asyncio
@@ -304,7 +288,7 @@ async def main():
 asyncio.run(main())
 ```
 
-The Low-level API in fact is just little bit sugared `caio` API.
+The low-level API is essentially a lightly sugared `caio` API.
 
 ```python
 import asyncio
@@ -325,8 +309,7 @@ asyncio.run(main())
 
 #### `Reader` and `Writer`
 
-When you want to read or write file linearly following example
-might be helpful.
+To read or write a file linearly, the following example may be helpful.
 
 ```python
 import asyncio
@@ -352,13 +335,9 @@ asyncio.run(main())
 
 #### `LineReader` - read file line by line
 
-LineReader is a helper that is very effective when you want to read a file
-linearly and line by line.
-
-It contains a buffer and will read the fragments of the file chunk by
-chunk into the buffer, where it will try to find lines.
-
-The default chunk size is 4KB.
+`LineReader` is a helper for reading a file linearly, line by line. It maintains a buffer
+and reads file fragments chunk by chunk, searching for line boundaries. The default chunk
+size is 4KB.
 
 ```python
 import asyncio
@@ -384,12 +363,9 @@ async def main():
 asyncio.run(main())
 ```
 
-When you want to read file by lines please avoid to use `async_open`
-use `LineReader` instead.
+To read a file line by line, prefer `LineReader` over `async_open`.
 
 ## More examples
-
-Useful examples with `aiofile`
 
 ### Async CSV Dict Reader
 
@@ -457,29 +433,27 @@ asyncio.run(main())
 
 ## Troubleshooting
 
-The caio `linux` implementation works normal for modern linux kernel versions
-and file systems. So you may have problems specific for your environment.
-It's not a bug and might be resolved some ways:
+The caio Linux backends (io_uring and libaio) work well on modern kernels and filesystems.
+Problems are usually environment-specific and are not bugs. There are several ways to resolve them:
 
-1. Upgrade the kernel
-2. Use compatible file systems
-3. Use threads based or pure python implementation.
+1. Upgrade the kernel.
+2. Use a compatible filesystem.
+3. Switch to a thread-based or pure-Python backend.
 
-The caio since version 0.7.0 contains some ways to do this.
+Since version 0.7.0, caio offers several ways to select the backend:
 
-1. In runtime use the environment variable `CAIO_IMPL` with
-possible values:
+1. Set the `CAIO_IMPL` environment variable at runtime:
 
-    * `linux` - use native linux kernels aio mechanism
-    * `thread` - use thread based implementation written in C
-    * `python` - use pure python implementation
+    * `uring` — Linux io_uring (requires kernel ≥ 5.1)
+    * `linux` — Linux libaio
+    * `thread` — C-based thread pool implementation
+    * `python` — pure-Python thread-based fallback
 
-2. File `default_implementation` located near `__init__.py` in caio
-installation path. It's useful for distros package maintainers. This file
-might contains comments (lines starts with `#` symbol) and the first line
-should be one of `linux` `thread` or `python`.
+2. The `default_implementation` file located next to `__init__.py` in the caio installation
+   directory. Useful for distribution package maintainers. The file may contain comments
+   (lines starting with `#`); the first non-comment line should be one of the values above.
 
-3. You might manually manage contexts:
+3. Manage contexts manually:
 
 ```python
 import asyncio
