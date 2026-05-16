@@ -7,7 +7,7 @@ from os import strerror
 from pathlib import Path
 from typing import (
     Any, Awaitable, BinaryIO, Callable, Dict, Generator, Optional, TextIO,
-    TypeVar, Union,
+    TypeVar, Union, cast,
 )
 from weakref import finalize
 
@@ -174,10 +174,9 @@ class AIOFile:
             return None
 
         if self.__open_result is None:
-            self.__open_result = self._run_in_thread(
-                open,
-                self._fname,
-                self._open_mode,
+            self.__open_result = cast(
+                "asyncio.Future[FileIOType]",
+                self._run_in_thread(open, self._fname, self._open_mode),
             )
             self._file_obj = await self.__open_result
             self.__open_result = None
@@ -312,7 +311,7 @@ def create_context(
 
     def finalizer() -> None:
         context.close()
-        DEFAULT_CONTEXT_STORE.pop(context, None)
+        DEFAULT_CONTEXT_STORE.pop(loop, None)
 
     finalize(loop, finalizer)
     DEFAULT_CONTEXT_STORE[loop] = context

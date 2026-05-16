@@ -112,11 +112,11 @@ class LineReader(collections.abc.AsyncIterable):
     ):
         self.__reader = Reader(aio_file, chunk_size=chunk_size, offset=offset)
 
-        self._buffer = (
+        self._buffer: Any = (
             io.BytesIO() if aio_file.mode.binary else io.StringIO()
-        )   # type: Any
+        )
 
-        self.linesep = (
+        self.linesep: Any = (
             aio_file.encode_bytes(line_sep)
             if aio_file.mode.binary
             else line_sep
@@ -135,9 +135,9 @@ class LineReader(collections.abc.AsyncIterable):
             # No line in buffer, read more data
             chunk = await self.__reader.read_chunk()
             if not chunk:
-                # No more data to read, return any remaining content in the buffer
+                # No more data, return any remaining content in the buffer
                 return buffer_remainder
-            # We have more data to read, write it to the buffer and handle it in the next iteration
+            # Write remaining + new data back to buffer for next iteration
             self._buffer.write(buffer_remainder)
             self._buffer.write(chunk)
             self._buffer.seek(0)
