@@ -1,8 +1,10 @@
 import importlib.metadata
+from email.message import Message
 from email.utils import parseaddr
+from typing import cast
 
 
-package_metadata = importlib.metadata.metadata("aiofile")
+package_metadata = cast(Message, importlib.metadata.metadata("aiofile"))
 
 _author_email_raw = package_metadata.get("Author-email", "")
 _author_name, _author_email_addr = parseaddr(_author_email_raw)

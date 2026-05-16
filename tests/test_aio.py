@@ -6,11 +6,12 @@ from base64 import b64encode
 from io import BytesIO
 from pathlib import Path
 from random import shuffle
+from typing import cast
 from unittest.mock import Mock, call
 from uuid import uuid4
 
-import caio  # type: ignore
-import pytest  # type: ignore
+import caio
+import pytest
 
 from aiofile import AIOFile
 from aiofile.utils import (
@@ -193,7 +194,7 @@ async def test_parallel_writer_ordering(
     result: bytes = b""
 
     async for chunk in Reader(r_file, chunk_size=chunk_size):
-        result += chunk  # type: ignore[operator]
+        result += cast(bytes, chunk)
 
     assert data == result
 

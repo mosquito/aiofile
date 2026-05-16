@@ -13,8 +13,8 @@ jobs:
     strategy:
       matrix:
         linter:
-          - pylama aiofile tests
-          - mypy aiofile tests
+          - ruff check aiofile tests
+          - ty check aiofile tests
 
     steps:
       - uses: actions/checkout@v4
