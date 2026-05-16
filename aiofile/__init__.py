@@ -1,7 +1,7 @@
 from .aio import AIOFile
 from .utils import (
-    BinaryFileWrapper, FileIOWrapperBase, LineReader, Reader, TextFileWrapper,
-    Writer, async_open,
+    BinaryFileWrapper, FileIOCloner, FileIOWrapperBase, LineReader, Reader,
+    TextFileWrapper, Writer, async_open, clone,
 )
 from .version import (
     __author__, __version__, author_info, package_info, package_license,
@@ -12,6 +12,7 @@ from .version import (
 __all__ = (
     "AIOFile",
     "BinaryFileWrapper",
+    "FileIOCloner",
     "FileIOWrapperBase",
     "LineReader",
     "Reader",
@@ -21,6 +22,7 @@ __all__ = (
     "__version__",
     "async_open",
     "author_info",
+    "clone",
     "package_info",
     "package_license",
     "project_home",
