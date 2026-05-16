@@ -5,7 +5,7 @@ import os
 from abc import ABC, abstractmethod
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any, Generator, Tuple, Union
+from typing import Any, Generator, Generic, Optional, Tuple, TypeVar, Union
 
 from .aio import AIOFile, FileIOType
 
@@ -350,13 +350,48 @@ def async_open(
     return BinaryFileWrapper(afp)
 
 
+T = TypeVar("T", bound=FileIOWrapperBase)
+
+
+class FileIOCloner(Generic[T]):
+    def __init__(self, file: T):
+        self.source_afp = file
+        self.cloned_afp: Optional[T] = None
+        self._lock = asyncio.Lock()
+
+    async def __clone(self) -> T:
+        async with self._lock:
+            if self.cloned_afp is not None:
+                return self.cloned_afp
+            self.cloned_afp = self.source_afp.__class__(
+                await self.source_afp.file.clone(),
+            )
+        return self.cloned_afp
+
+    def __await__(self) -> Generator[Any, None, T]:
+        return self.__clone().__await__()
+
+    async def __aenter__(self) -> T:
+        return await self.__clone()
+
+    async def __aexit__(self, *_: Any) -> None:
+        if self.cloned_afp is not None:
+            await self.cloned_afp.close()
+
+
+def clone(afp: FileIOWrapperBase) -> "FileIOCloner[FileIOWrapperBase]":
+    return FileIOCloner(afp)
+
+
 __all__ = (
     "BinaryFileWrapper",
+    "FileIOCloner",
     "FileIOWrapperBase",
     "LineReader",
     "Reader",
     "TextFileWrapper",
     "Writer",
     "async_open",
+    "clone",
     "unicode_reader",
 )
