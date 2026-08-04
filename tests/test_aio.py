@@ -481,7 +481,10 @@ async def test_text_io_wrapper(aio_file_maker, temp_file):
 
 
 async def test_text_io_wrapper_read_length_multibyte(aio_file_maker, temp_file):
-    data = "世界人権宣言前文人類社会のすべての構成員の固有の尊厳と平等で譲ることのできない権利とを承認する"
+    data = (
+        "世界人権宣言前文人類社会のすべての構成員の固有の尊厳と平等で"
+        "譲ることのできない権利とを承認する"
+    )
 
     async with aio_file_maker(temp_file, "w+") as afp:
         await afp.write(data)
