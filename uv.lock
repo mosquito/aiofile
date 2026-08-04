@@ -41,16 +41,16 @@ dev = [
 
 [[package]]
 name = "aiomisc"
-version = "18.0.19"
+version = "18.0.26"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiothreads" },
     { name = "colorlog" },
     { name = "logging-journald", marker = "sys_platform == 'linux'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/da/ff/6ab8154f248f56740ee5db61faef15f03bd38c21295609930364f36a25d3/aiomisc-18.0.19.tar.gz", hash = "sha256:278cc9335f3ae4ad735ff55fdc01634b1109f0e198c6ac9ec60d767d1915f610", size = 490071, upload-time = "2026-03-23T16:47:40.504Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/3d/5c/fa97a5bc97485a3c2556e5d0eda206ffba9d55a2757663e5b3d44695ecb6/aiomisc-18.0.26.tar.gz", hash = "sha256:c2c4e5e372d01ccc8748c2a5673095e4a99c754309400e756658c1b8b3225138", size = 506836, upload-time = "2026-07-10T06:54:23.118Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/fb/2b/91744a314170c87ca1f36e632117d796389c317736f10d3f4940c4dd3d5d/aiomisc-18.0.19-py3-none-any.whl", hash = "sha256:d08b7347cf4d7069492dc05059f2b28e9645bc257b4dd6549d11c7fdbaf5272c", size = 94792, upload-time = "2026-03-23T16:47:38.951Z" },
+    { url = "https://files.pythonhosted.org/packages/73/c3/5ce937640272a0322967494085061d36f80b23a5cf381d512864f1c83874/aiomisc-18.0.26-py3-none-any.whl", hash = "sha256:15c09091a90461ad3dbf6a0630689ce301cb9697ad6206d9b869304daaae36a1", size = 96716, upload-time = "2026-07-10T06:54:21.678Z" },
 ]
 
 [[package]]
