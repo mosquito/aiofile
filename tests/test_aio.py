@@ -235,6 +235,13 @@ async def test_sequential_open(aio_file_maker, temp_file):
         await file.open()
 
 
+async def test_double_close(aio_file_maker, temp_file):
+    file = aio_file_maker(temp_file, "w")
+    await file.open()
+    await file.close()
+    await file.close()
+
+
 async def test_parallel_open(aio_file_maker, temp_file):
     file = aio_file_maker(temp_file, "r")
     try:

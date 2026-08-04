@@ -198,7 +198,11 @@ class AIOFile:
             return self
 
     async def close(self) -> None:
-        if self._file_obj is None or not self._file_obj_owner:
+        if (
+            self._file_obj is None
+            or not self._file_obj_owner
+            or self._file_obj.closed
+        ):
             return
 
         async with self._clone_lock:
