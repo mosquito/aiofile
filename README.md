@@ -483,3 +483,16 @@ asyncio.run(main())
 stdlib, `aiofile` (every `caio` backend), `aiofiles`, `aiomisc.io` — linear/random
 block order, read/write, buffered/`O_DIRECT`, sequential/concurrent, content-verified.
 Tool, methodology and raw data: [`benchmark/`](benchmark/).
+
+Linear write, MiB/s (one Linux/ext4 run, mean of 5 rounds):
+
+| participant | x1 | x8 | speedup |
+|---|--:|--:|--:|
+| stdlib (buffered) | 38 | 93 | 2.5x |
+| stdlib (O_DIRECT) | 22 | 41 | 1.9x |
+| aiofile (linux_uring) | 55 | 466 | 8.5x |
+| aiofile (linux_aio) | 637 | 856 | 1.3x |
+| aiofile (thread_aio) | 24 | 39 | 1.6x |
+| aiofile (python_aio) | 29 | 74 | 2.6x |
+| aiofiles | 24 | 22 | 0.9x |
+| aiomisc | 23 | 21 | 0.9x |
