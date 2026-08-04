@@ -169,6 +169,10 @@ class AIOFile:
     def encoding(self) -> str:
         return self._encoding
 
+    @property
+    def closed(self) -> bool:
+        return self._file_obj is None or self._file_obj.closed
+
     async def open(self) -> Optional[int]:
         if self._file_obj is not None:
             if self._file_obj.closed:
@@ -198,7 +202,11 @@ class AIOFile:
             return self
 
     async def close(self) -> None:
-        if self._file_obj is None or not self._file_obj_owner:
+        if (
+            self._file_obj is None
+            or not self._file_obj_owner
+            or self._file_obj.closed
+        ):
             return
 
         async with self._clone_lock:

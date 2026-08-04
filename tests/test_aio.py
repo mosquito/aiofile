@@ -235,6 +235,31 @@ async def test_sequential_open(aio_file_maker, temp_file):
         await file.open()
 
 
+async def test_double_close(aio_file_maker, temp_file):
+    file = aio_file_maker(temp_file, "w")
+    await file.open()
+    await file.close()
+    await file.close()
+
+
+async def test_closed_attribute(aio_file_maker, temp_file):
+    file = aio_file_maker(temp_file, "w")
+    assert file.closed
+    await file.open()
+    assert not file.closed
+    await file.close()
+    assert file.closed
+
+
+async def test_closed_attribute_wrapper(async_open, temp_file):
+    fp = async_open(temp_file, "w")
+    assert fp.closed
+    await fp
+    assert not fp.closed
+    await fp.close()
+    assert fp.closed
+
+
 async def test_parallel_open(aio_file_maker, temp_file):
     file = aio_file_maker(temp_file, "r")
     try:
@@ -453,6 +478,24 @@ async def test_text_io_wrapper(aio_file_maker, temp_file):
         fp.seek(0)
         assert await fp.read(1) == "💾"
         assert fp.tell() == 4
+
+
+async def test_text_io_wrapper_read_length_multibyte(aio_file_maker, temp_file):
+    data = (
+        "世界人権宣言前文人類社会のすべての構成員の固有の尊厳と平等で"
+        "譲ることのできない権利とを承認する"
+    )
+
+    async with aio_file_maker(temp_file, "w+") as afp:
+        await afp.write(data)
+
+    collected = ""
+    async with TextFileWrapper(aio_file_maker(temp_file, "r")) as fp:
+        while chunk := await fp.read(12):
+            assert len(chunk) <= 12
+            collected += chunk
+
+    assert collected == data
 
 
 async def test_binary_io_wrapper(aio_file_maker, temp_file):
