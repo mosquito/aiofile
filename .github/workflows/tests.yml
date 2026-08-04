@@ -60,6 +60,14 @@ jobs:
             os: windows-latest
           - python-version: "3.14"
             os: windows-latest
+          # caio's C backends declare Py_mod_gil, so aiofile (pure Python)
+          # can be exercised under a real no-GIL interpreter.
+          - python-version: "3.13t"
+            os: ubuntu-latest
+            free-threaded: true
+          - python-version: "3.14t"
+            os: ubuntu-latest
+            free-threaded: true
 
     runs-on: ${{ matrix.os }}
 
@@ -76,6 +84,8 @@ jobs:
 
       - name: pytest
         run: uv run pytest --cov=aiofile --color=yes --cov-report=term-missing -vv tests README.md
+        env:
+          PYTHON_GIL: ${{ matrix.free-threaded && '0' || '' }}
 
       - name: coveralls
         run: uv run coveralls || true
