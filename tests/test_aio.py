@@ -14,6 +14,7 @@ import caio
 import pytest
 
 from aiofile import AIOFile, clone
+from aiofile.aio import DEFAULT_CONTEXT_STORE, create_context
 from aiofile.utils import (
     BinaryFileWrapper, LineReader, Reader, TextFileWrapper, Writer,
 )
@@ -33,6 +34,23 @@ def temp_file(tmp_path):
         pass
 
     return path
+
+
+def test_default_context_closed_with_event_loop(monkeypatch):
+    loop = asyncio.new_event_loop()
+    context = Mock()
+
+    monkeypatch.setattr(asyncio, "get_event_loop", lambda: loop)
+    monkeypatch.setattr(caio, "AsyncioContext", Mock(return_value=context))
+
+    assert create_context() is context
+    assert DEFAULT_CONTEXT_STORE[id(loop)] is context
+
+    loop.close()
+
+    context.close.assert_called_once_with()
+    assert id(loop) not in DEFAULT_CONTEXT_STORE
+    assert loop.is_closed()
 
 
 @pytest.fixture

@@ -2,7 +2,7 @@ import asyncio
 import os
 from collections import namedtuple
 from concurrent.futures import Executor
-from functools import partial
+from functools import partial, wraps
 from os import strerror
 from pathlib import Path
 from typing import (
@@ -313,8 +313,44 @@ class AIOFile:
         )
 
 
-ContextStoreType = Dict[asyncio.AbstractEventLoop, caio.AsyncioContext]
+# Keyed by id(loop) so the keys themselves do not retain event loops. Values
+# still retain their loops through caio contexts, so create_context() also
+# installs synchronous cleanup into loop.close(). This is important for
+# short-lived loops: waiting for garbage collection would keep native AIO
+# resources (and io_uring SQPOLL threads) alive between loop instances.
+ContextStoreType = Dict[int, caio.AsyncioContext]
 DEFAULT_CONTEXT_STORE: ContextStoreType = {}
+
+
+def _release_context(loop_id: int) -> None:
+    context = DEFAULT_CONTEXT_STORE.pop(loop_id, None)
+    if context is not None:
+        context.close()
+
+
+def _install_context_cleanup(
+    loop: asyncio.AbstractEventLoop,
+) -> None:
+    original_close = loop.close
+    loop_id = id(loop)
+
+    @wraps(original_close)
+    def close() -> None:
+        if loop.is_running():
+            original_close()
+            return
+
+        try:
+            _release_context(loop_id)
+        finally:
+            original_close()
+
+    try:
+        setattr(loop, "close", close)
+    except (AttributeError, TypeError):
+        # Some third-party event loops do not allow instance attributes.
+        # The finalizer below still provides interpreter-shutdown cleanup.
+        pass
 
 
 def create_context(
@@ -323,18 +359,15 @@ def create_context(
     loop = asyncio.get_event_loop()
     context = caio.AsyncioContext(max_requests, loop=loop)
 
-    def finalizer() -> None:
-        context.close()
-        DEFAULT_CONTEXT_STORE.pop(loop, None)
-
-    finalize(loop, finalizer)
-    DEFAULT_CONTEXT_STORE[loop] = context
+    _install_context_cleanup(loop)
+    finalize(loop, _release_context, id(loop))
+    DEFAULT_CONTEXT_STORE[id(loop)] = context
     return context
 
 
 def get_default_context() -> caio.AsyncioContext:
     loop = asyncio.get_event_loop()
-    context = DEFAULT_CONTEXT_STORE.get(loop)
+    context = DEFAULT_CONTEXT_STORE.get(id(loop))
 
     if context is not None:
         return context

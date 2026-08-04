@@ -18,10 +18,16 @@ try:
 except ImportError:
     linux_aio_asyncio = None        # type: ignore
 
+try:
+    from caio import linux_uring_asyncio
+except ImportError:
+    linux_uring_asyncio = None      # type: ignore
+
 
 IMPLEMENTATIONS: List[Union[ModuleType, None]] = list(
     filter(
         None, [
+            linux_uring_asyncio,
             linux_aio_asyncio,
             thread_aio_asyncio,
             python_aio_asyncio,
