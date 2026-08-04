@@ -1,29 +1,53 @@
 # aiofile benchmark
 
-Compares `aiofile` (across every `caio` backend available on this platform)
-against the stdlib, `aiofiles` and `aiomisc.io`. **Linux only.**
+Compares `aiofile` (once per `caio` backend) against the stdlib, `aiofiles`
+and `aiomisc.io`. **Linux only.**
 
 This is a separate uv project on purpose, so its dependencies don't leak
-into the main package.
+into the main package. Architecture ported from `../caio/benchmark/`
+(`bench.py` + `bench_runner.py`), adapted to compare libraries built on
+top of `caio` rather than `caio`'s own backends directly.
 
 ## What it measures
 
-Every axis combination gets its own freshly created, correctly sized temp
-file inside `--dir` -- never a fixed path, never reused across passes --
-so results aren't polluted by page-cache state or writeback left behind
-by an earlier library/mode/pattern/round:
-
 - **library**: stdlib, `aiofile`, `aiofiles`, `aiomisc.io`
-- **backend** (`aiofile` only): every entry in `caio.variants_asyncio` on
-  this platform (e.g. `linux_uring`, `linux_aio`, `thread_aio`,
-  `python_aio`), each via an explicitly constructed `AsyncioContext`
-  passed as `AIOFile(..., context=...)` -- not the `CAIO_IMPL` environment
-  variable, so every backend runs in one process, one invocation
+- **backend** (`aiofile` only): `uring`/`linux`/`thread`/`python`
+  (`CAIO_IMPL` values) -- whichever caio actually resolves each to is what
+  gets written to the TSV, never the requested name
 - **mode**: buffered, or `O_DIRECT`
+- **block size**: one or more, via `--block-sizes` (space-separated)
 - **pattern**: linear or random block order
 - **op**: read or write
-- **concurrency**: one worker, or `--concurrency` workers -- all against
-  the *same* open handle, not one handle each
+- **concurrency**: one or more levels, via `--concurrency-levels` -- all
+  against the *same* open handle, not one handle each
+
+Each *(participant, mode, block size)* gets one freshly created,
+correctly sized file, populated once, then every pattern/op/concurrency
+cell in that group reuses it.
+
+Every cell runs a **fixed op count** (`--ops`, plus untimed `--warmup-ops`
+first), never a fixed duration -- a cell always completes in full, never
+gets cancelled partway through, and its result is never missing or
+padded. Total run time is bounded by `--ops`, not by how slow a
+participant happens to be.
+
+`bench.py` runs one participant. It's a **sliding-window** engine (ported
+from `../caio/benchmark/bench.py`): exactly `concurrency` ops in flight
+at any time, a new one spawned the instant any completes -- no static
+per-worker chunking, no idle workers waiting on a slower peer. Only a
+sample of ops (10%) are individually timed for latency; throughput always
+comes from wall time over the full op count.
+
+`bench_runner.py` runs every participant, each **in its own subprocess**,
+strictly one at a time (ported from `../caio/benchmark/bench_runner.py`).
+A real subprocess, not fork/multiprocessing, so `CAIO_IMPL` -- set in
+this process's own environment right before it starts the child -- is
+what the child interpreter's very first `import caio` sees; no
+deferred-import tricks needed in `bench.py`. If the requested backend
+isn't actually available, `bench.py` raises rather than silently
+measuring caio's fallback under the requested name, and the runner aborts
+the whole run on the first non-zero exit code rather than merging a TSV
+with a silent gap in it.
 
 `O_DIRECT` is exercised for stdlib only, via `os.pwritev`/`os.preadv` into
 a caller-owned page-aligned buffer, so alignment is preserved end to end.
@@ -31,56 +55,58 @@ a caller-owned page-aligned buffer, so alignment is preserved end to end.
 `caio` allocate the destination buffer with no alignment guarantee, and
 there is no public API to supply one instead (see aiofile issue #100).
 `aiofiles`/`aiomisc.io` open files through the stdlib `open()`, which has
-no way to request `O_DIRECT` at all.
+no way to request `O_DIRECT` at all. A block size that isn't a multiple of
+4096 just skips the `O_DIRECT` case for that size.
 
-Every read and write is content-verified: the first 8 bytes of each block
-are tagged with its offset on write and checked on read, *after* the
-timed region stops so verification cost isn't counted as I/O time. A
-mismatch or short read/write aborts the run with a traceback instead of
-silently producing a bad number.
+This tool does not verify content -- only that every read/write moved the
+expected number of bytes. Hashing every block would tax the very thing
+being measured. Correctness (including concurrent access to one handle)
+is `stability/soak.py`'s job, on a different workload.
 
 The timed metric is operation-completion time, not durable-write time: it
-stops as soon as the read/write calls return, before the session's
+stops as soon as the read/write call returns, before the session's
 `close()` (which for a writable `AIOFile` runs `fdsync`, and for a
-buffered Python file object may flush on close). Two libraries closing
-differently isn't reflected in the numbers.
+buffered Python file object may flush on close).
 
 ## Running
 
 ```sh
 cd benchmark
-uv run python bench.py > results.tsv
+uv run python bench_runner.py
 ```
 
-stdout is *only* the TSV header and data rows -- nothing else, so it's
-safe to redirect straight to a file. Progress and environment info
-(Python/kernel version, which `caio` backends were found, effective
-concurrency) go to stderr via `logging`, not stdout.
+Everything after `bench_runner.py` is forwarded to every `bench.py`
+invocation, e.g. `uv run python bench_runner.py --ops 5000 --block-sizes
+4096 65536`. Flags (see `bench.py --help`): `--file-size`, `--block-sizes`
+(one or more), `--concurrency-levels` (one or more, default `1 8`),
+`--ops` (default 1000), `--warmup-ops` (default 100), `--dir`.
 
-Flags (see `--help`): `--file-size`, `--block-size` (must be a multiple
-of 4096, the `O_DIRECT` alignment this script assumes), `--concurrency`,
-`--rounds`, `--dir`, `--max-requests` and `--deferred` (passed to every
-`caio` `AsyncioContext`).
+Output goes to `results/bench_<library>_<backend>.tsv` per participant,
+merged into `results/aiofile-bench-results.tsv` at the end (set
+`AIOFILE_BENCH_RESULTS` to change the output directory). Progress goes to
+stdout/stderr as each participant runs; nothing is buffered until the end.
 
 ## Output
 
-One raw row per `(library, backend, mode, pattern, op, concurrency,
-round)` -- every round kept separate, nothing averaged or min'd. Compute
-mean/stdev/quantiles/whatever downstream from the TSV; this script
-doesn't rank or aggregate anything itself.
+One row per **sampled** op (about 10% of `--ops`, at least one per cell)
+-- `wall_s`/`n_ops`/`mib_s` are the whole cell's numbers and repeat across
+every row for that cell, `latency_us` is that one op's own latency.
+Compute mean/percentiles/whatever downstream from the raw `latency_us`
+values; this script doesn't rank or aggregate anything itself.
 
 | column | meaning |
 |---|---|
 | `library` | `stdlib`, `aiofile`, `aiofiles`, `aiomisc` |
-| `backend` | `caio` backend name for `aiofile` rows, `n/a` otherwise |
+| `backend` | resolved `caio` backend for `aiofile` rows, `n/a` otherwise |
 | `mode` | `buffered` or `direct` |
+| `block_size` | bytes per read/write op |
 | `pattern` | `linear` or `random` block order |
 | `op` | `write` or `read` |
-| `concurrency` | worker count for this pass |
-| `round` | 0-based round index |
-| `file_size`, `block_size` | bytes |
-| `seconds` | wall-clock time for the whole pass (all workers, all blocks) |
-| `mib_per_sec` | `file_size` / `seconds`, in MiB/s |
+| `concurrency` | in-flight ops for this cell |
+| `latency_us` | this sampled op's own latency, in microseconds |
+| `wall_s` | wall-clock time for the whole cell (`--ops` ops, `concurrency` in flight) |
+| `n_ops` | `--ops` -- total ops in this cell (not just the sampled ones) |
+| `mib_s` | `n_ops * block_size` / `wall_s`, in MiB/s |
 
 ## Reading the results
 
@@ -101,6 +127,11 @@ doesn't rank or aggregate anything itself.
   adapters; native vs thread-based compares different execution models
   entirely. Compare backends pairwise for a specific question (e.g. "which
   minimizes per-op overhead at this block size"), not as one ranking.
+- Never take an explanation of *why* one backend beats another (eager vs
+  batched submission, SQPOLL, etc.) on faith from a single run's numbers
+  -- confirm the actual negotiated state (e.g. `context.sqpoll`) before
+  asserting a cause, and design a paired experiment that holds everything
+  else fixed. It's easy to be confidently wrong here.
 
 None of this is a universal ranking. Results depend on the OS, filesystem,
 storage device, and kernel. If you're benchmarking the `caio` backends
@@ -109,9 +140,12 @@ themselves rather than the libraries built on top, see `caio`'s own
 
 ## Plotting
 
-`plot_results.py` turns a TSV into a PNG report (grouped throughput bars
-per op/pattern, plus a concurrency-speedup chart):
+`plot_results.py` turns a merged TSV into one PNG report per distinct
+block size found in it (throughput bars per op/pattern/concurrency, a
+p50/p95/p99 latency footer under each, plus a concurrency-speedup chart)
+-- different block sizes are different workloads, never averaged into one
+chart:
 
 ```sh
-uv run --with matplotlib --with numpy --with pillow python plot_results.py results.tsv
+uv run --with matplotlib --with numpy --with pillow python plot_results.py results/aiofile-bench-results.tsv
 ```

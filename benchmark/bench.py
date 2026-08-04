@@ -1,43 +1,37 @@
+#!/usr/bin/env python3
 """
-Single-file read/write benchmark: stdlib, aiofile (across every available
-caio backend), aiofiles, aiomisc.io.
+aiofile benchmark worker -- one participant (a library, and for aiofile
+one caio backend) per process invocation.
 
-Linux only. Every timed pass gets its own freshly created, correctly
-sized temp file inside --dir (never a fixed path, never reused across
-passes) so results aren't polluted by page-cache state or writeback left
-behind by an earlier library/mode/pattern. Axes: linear vs random block
-order, read vs write, buffered vs O_DIRECT, sequential vs concurrent
-workers against one shared open handle.
+Launched by bench_runner.py, which sets CAIO_IMPL in this process's
+environment *before* it starts (a real subprocess, not fork/spawn), so
+the imports below see the right backend from the very first line -- no
+deferred imports, no fork-safety questions. Engine architecture (sliding
+window, fixed op count, sampled latency) ported from
+../caio/benchmark/bench.py.
 
-O_DIRECT is exercised for stdlib only, via os.pwritev/os.preadv into a
-caller-owned page-aligned buffer -- alignment is preserved end to end.
-aiofile is excluded from O_DIRECT: AIOFile.read_bytes has caio allocate
-the destination buffer with no alignment guarantee, and there is no
-public API to supply one (see aiofile issue #100). aiofiles/aiomisc.io
-open files through the stdlib `open()` with no way to pass O_DIRECT at
-all.
+Sliding-window engine: exactly --concurrency-levels[i] ops in flight at
+once, a new one spawned as soon as any completes, run for a fixed op
+count (--ops) rather than a fixed duration -- a cell is always bounded
+and never partial/cancelled mid-op. Only a sample of ops (SAMPLE_RATE)
+are individually timed for latency; throughput always comes from wall
+time over the full op count.
 
-aiofile is benchmarked once per caio backend available on this platform
-(`caio.variants_asyncio`) using an explicitly constructed context per
-backend, not the CAIO_IMPL environment variable -- so all backends run
-in one process, one script invocation.
+Pure throughput/latency measurement -- no content verification here
+(that's stability/soak.py's job, on a different workload; hashing every
+block would tax the very thing being measured). Each op just checks the
+byte count the I/O call reports.
 
-Every read/write is content-verified: the first 8 bytes of each block
-are tagged with its offset on write and checked on read, after the timed
-region so verification cost isn't counted as I/O time. A mismatch aborts
-the run with a traceback instead of silently producing a bad number.
-
-This script only writes: a TSV header, then one raw row per (library,
-backend, mode, pattern, op, concurrency, round) to stdout -- no
-aggregation, no ranking. Compute stdev/quantiles/whatever downstream.
-Progress and environment info go to stderr via `logging`.
+O_DIRECT is exercised for stdlib only (see the multi-library-throughput
+PR description for why aiofile is excluded). A block size that isn't a
+multiple of 4096 just skips the O_DIRECT case for that size.
 """
 import argparse
 import asyncio
+import itertools
 import logging
 import mmap
 import os
-import platform
 import random
 import sys
 import tempfile
@@ -46,56 +40,65 @@ from pathlib import Path
 
 import aiofiles
 import aiomisc.io as aiomisc_io
-import caio
 
 from aiofile import AIOFile
 
 log = logging.getLogger("bench")
 
 DIRECT_ALIGN = 4096
+SAMPLE_RATE = 0.1
+
+# CAIO_IMPL value -> the module name prefix caio actually resolves it to.
+CAIO_BACKENDS = {
+    "uring": "linux_uring",
+    "linux": "linux_aio",
+    "thread": "thread_aio",
+    "python": "python_aio",
+}
+
+COLUMNS = (
+    "library", "backend", "mode", "block_size", "pattern", "op",
+    "concurrency", "latency_us", "wall_s", "n_ops", "mib_s",
+)
+
+
+def pct(data, p):
+    s = sorted(data)
+    return s[min(int(len(s) * p), len(s) - 1)]
 
 
 def aligned_buffer(size):
-    # mmap'd memory is page-aligned, which O_DIRECT needs; a plain
-    # bytes/bytearray has no such guarantee.
     buf = mmap.mmap(-1, size)
     buf[:] = os.urandom(size)
     return buf
 
 
-def tag(buffer, offset):
-    buffer[0:8] = offset.to_bytes(8, "little")
-
-
-def check_tag(data, offset, block_size, where):
-    if len(data) != block_size:
-        raise RuntimeError(
-            f"{where}: short read {len(data)} != {block_size} "
-            f"at offset {offset}",
-        )
-    got = int.from_bytes(data[:8], "little")
-    if got != offset:
-        raise RuntimeError(
-            f"{where}: content mismatch at offset {offset}: tag={got}",
-        )
-
-
-def populate_file(path, file_size, block_size):
-    """Untimed setup for read passes: write a correctly tagged block at
-    every offset so the timed read has real, checkable data to see."""
+def populate_file(path, cells, block_size, buf):
     fd = os.open(str(path), os.O_RDWR)
     try:
-        buf = aligned_buffer(block_size)
-        for offset in range(0, file_size, block_size):
-            tag(buf, offset)
-            os.pwrite(fd, buf, offset)
+        for cell in range(cells):
+            n = os.pwrite(fd, buf, cell * block_size)
+            if n != block_size:
+                raise RuntimeError(
+                    f"populate: short write {n} != {block_size} "
+                    f"at cell {cell}",
+                )
         os.fsync(fd)
     finally:
         os.close(fd)
 
 
-# -- sessions: one already-open handle to a file, write_at/read_at must
-# -- be safe to call concurrently from multiple tasks against it --------
+def make_offsets(cells, block_size, pattern):
+    linear = list(range(0, cells * block_size, block_size))
+    if pattern == "linear":
+        return linear
+    random_order = linear[:]
+    random.Random(0).shuffle(random_order)
+    return random_order
+
+
+# -- sessions: one already-open handle, write_at/read_at must be safe to
+# -- call concurrently from multiple in-flight ops against it -----------
 
 class Session:
     def __init__(self, path, direct):
@@ -111,10 +114,8 @@ class Session:
 
 class StdlibSession(Session):
     """pwritev/preadv into a caller-owned buffer: correct under O_DIRECT
-    (alignment preserved end to end, unlike pwrite/pread which can't take
-    a caller destination buffer for reads) and safe to call concurrently
-    from multiple threads against one fd, since neither touches the fd's
-    file position."""
+    and safe to call concurrently from multiple in-flight ops against
+    one fd, since neither touches the fd's file position."""
 
     async def __aenter__(self):
         flags = os.O_RDWR | os.O_CREAT
@@ -130,22 +131,16 @@ class StdlibSession(Session):
         return await asyncio.to_thread(os.pwritev, self.fd, [buffer], offset)
 
     async def read_at(self, offset, buffer, size):
-        n = await asyncio.to_thread(os.preadv, self.fd, [buffer], offset)
-        return bytes(buffer[:n])
+        return await asyncio.to_thread(os.preadv, self.fd, [buffer], offset)
 
 
 class AIOFileSession(Session):
-    """Buffered only -- see module docstring for why aiofile is excluded
-    from the O_DIRECT cases. read_bytes/write_bytes take an explicit
-    offset and AIOFile keeps no internal cursor, so the same instance can
-    be hit concurrently with no locking of our own."""
-
-    def __init__(self, path, context):
-        super().__init__(path, direct=False)
-        self.context = context
+    """Buffered only. read_bytes/write_bytes take an explicit offset and
+    AIOFile keeps no internal cursor, so one instance is safe to hit
+    concurrently with no locking of our own."""
 
     async def __aenter__(self):
-        self.afp = AIOFile(self.path, "rb+", context=self.context)
+        self.afp = AIOFile(self.path, "rb+")
         await self.afp.open()
         return self
 
@@ -156,20 +151,16 @@ class AIOFileSession(Session):
         return await self.afp.write_bytes(buffer, offset)
 
     async def read_at(self, offset, buffer, size):
-        return await self.afp.read_bytes(size, offset)
+        return len(await self.afp.read_bytes(size, offset))
 
 
 class AiofilesSession(Session):
-    """aiofiles wraps one stdlib file object with one seek cursor, so
-    concurrent access to a single handle has to be serialized by hand --
-    there's no positional read/write in its public API."""
-
-    def __init__(self, path):
-        super().__init__(path, direct=False)
+    """One seek cursor per handle -- concurrent access has to be
+    serialized by hand, there's no positional read/write in the API."""
 
     async def __aenter__(self):
-        self.fp = await aiofiles.open(self.path, "rb+")
         self.lock = asyncio.Lock()
+        self.fp = await aiofiles.open(self.path, "rb+")
         return self
 
     async def __aexit__(self, *exc):
@@ -183,19 +174,16 @@ class AiofilesSession(Session):
     async def read_at(self, offset, buffer, size):
         async with self.lock:
             await self.fp.seek(offset)
-            return await self.fp.read(size)
+            return len(await self.fp.read(size))
 
 
 class AiomiscSession(Session):
     """Same limitation as aiofiles: one seek cursor per handle."""
 
-    def __init__(self, path):
-        super().__init__(path, direct=False)
-
     async def __aenter__(self):
+        self.lock = asyncio.Lock()
         self.fp = aiomisc_io.async_open(self.path, "rb+")
         await self.fp.open()
-        self.lock = asyncio.Lock()
         return self
 
     async def __aexit__(self, *exc):
@@ -209,199 +197,240 @@ class AiomiscSession(Session):
     async def read_at(self, offset, buffer, size):
         async with self.lock:
             await self.fp.seek(offset)
-            return await self.fp.read(size)
+            return len(await self.fp.read(size))
 
 
-async def run_pass(session_cm, offsets, block_size, write, concurrency):
-    async with session_cm as session:
-        buffers = [aligned_buffer(block_size) for _ in range(concurrency)]
-        chunks = [offsets[i::concurrency] for i in range(concurrency)]
+def make_session(library, path, direct):
+    if library == "stdlib":
+        return StdlibSession(path, direct)
+    if library == "aiofile":
+        return AIOFileSession(path, direct=False)
+    if library == "aiofiles":
+        return AiofilesSession(path, direct=False)
+    if library == "aiomisc":
+        return AiomiscSession(path, direct=False)
+    raise ValueError(library)
 
-        async def worker(chunk, buffer):
-            collected = []
-            for offset in chunk:
-                if write:
-                    tag(buffer, offset)
-                    written = await session.write_at(offset, buffer)
-                    collected.append((offset, written))
-                else:
-                    data = await session.read_at(offset, buffer, block_size)
-                    collected.append((offset, bytes(data)))
-            return collected
 
-        start = time.monotonic()
-        worker_results = await asyncio.gather(
-            *(worker(chunk, buffer) for chunk, buffer in zip(chunks, buffers)),
+# -- engine: sliding window, fixed op count, sampled latency -- ported
+# -- from ../caio/benchmark/bench.py's run() -----------------------------
+
+async def run(session, concurrency, n, block_size, offsets, write, warmup):
+    """Run exactly n reads or writes through `session`, `concurrency` in
+    flight at most. Returns (sampled_latencies_in_seconds, wall_seconds).
+    """
+    offsets_cycle = itertools.cycle(offsets)
+    free = [aligned_buffer(block_size) for _ in range(concurrency)]
+
+    async def do_op(buf, offset, timed):
+        t0 = time.perf_counter() if timed else 0.0
+        if write:
+            n_done = await session.write_at(offset, buf)
+        else:
+            n_done = await session.read_at(offset, buf, block_size)
+        if n_done != block_size:
+            kind = "write" if write else "read"
+            raise RuntimeError(
+                f"short {kind}: {n_done} != {block_size} at offset {offset}",
+            )
+        return buf, (time.perf_counter() - t0) if timed else None
+
+    async def drain(pending, sampled, collect):
+        done, pending = await asyncio.wait(
+            pending, return_when=asyncio.FIRST_COMPLETED,
         )
-        elapsed = time.monotonic() - start
+        for task in done:
+            buf, lat = task.result()
+            free.append(buf)
+            if collect is not None and task in sampled:
+                collect.append(lat)
+                sampled.discard(task)
+        return pending
 
-        # Verification happens after the timer stops so it isn't counted
-        # as I/O time -- see module docstring.
-        for collected in worker_results:
-            for offset, value in collected:
-                if write:
-                    if value != block_size:
-                        raise RuntimeError(
-                            f"write: short write {value} != {block_size} "
-                            f"at offset {offset}",
-                        )
-                else:
-                    check_tag(value, offset, block_size, "read")
+    if warmup:
+        pending = set()
+        left = warmup
+        while left > 0 or pending:
+            while free and left > 0:
+                buf = free.pop()
+                offset = next(offsets_cycle)
+                pending.add(asyncio.create_task(do_op(buf, offset, False)))
+                left -= 1
+            if pending:
+                pending = await drain(pending, set(), None)
 
-        return elapsed
-
-
-def build_participants(args, backend_contexts):
-    participants = [
-        (
-            "stdlib", "n/a",
-            lambda path, direct: StdlibSession(path, direct),
-            True,
-        ),
-    ]
-    for name, ctx in backend_contexts.items():
-        participants.append((
-            "aiofile", name,
-            (lambda path, direct, ctx=ctx: AIOFileSession(path, ctx)),
-            False,
-        ))
-    participants.append(
-        ("aiofiles", "n/a", lambda path, direct: AiofilesSession(path), False),
+    sample_mask = bytearray(
+        1 if random.random() < SAMPLE_RATE else 0 for _ in range(n)
     )
-    participants.append(
-        ("aiomisc", "n/a", lambda path, direct: AiomiscSession(path), False),
-    )
-    return participants
+    if n:
+        sample_mask[0] = 1  # guarantee at least one latency sample
+
+    latencies = []
+    pending = set()
+    sampled = set()
+    idx = 0
+    t0 = time.perf_counter()
+    while idx < n or pending:
+        while free and idx < n:
+            buf = free.pop()
+            offset = next(offsets_cycle)
+            timed = bool(sample_mask[idx])
+            task = asyncio.create_task(do_op(buf, offset, timed))
+            if timed:
+                sampled.add(task)
+            pending.add(task)
+            idx += 1
+        if pending:
+            pending = await drain(pending, sampled, latencies)
+    wall = time.perf_counter() - t0
+
+    return latencies, wall
 
 
-async def main():
+# -- sweep -----------------------------------------------------------------
+
+async def sweep(library, backend, args, out_fp):
+    backend_label = backend or "n/a"
+    if library == "aiofile":
+        from aiofile.aio import get_default_context
+        ctx = get_default_context()
+        actual = type(ctx).__module__.rsplit(".", 1)[-1]
+        actual = actual.removesuffix("_asyncio")
+        if actual != CAIO_BACKENDS.get(backend):
+            # Refuse to silently measure a fallback backend under the
+            # requested backend's name -- that mislabels every row.
+            raise RuntimeError(
+                f"requested backend={backend!r} but caio resolved "
+                f"{actual!r} instead (unavailable on this host?)",
+            )
+        backend_label = actual
+
+    direct_capable = library == "stdlib"
+    has_direct = hasattr(os, "O_DIRECT")
+
+    for block_size in args.block_sizes:
+        cells = args.file_size // block_size
+        direct_ok = (
+            direct_capable and has_direct and block_size % DIRECT_ALIGN == 0
+        )
+        modes = [False, True] if direct_ok else [False]
+
+        for direct in modes:
+            mode_label = "direct" if direct else "buffered"
+            fd, tmp_name = tempfile.mkstemp(dir=args.dir, prefix="bench-")
+            os.ftruncate(fd, cells * block_size)
+            os.close(fd)
+            path = Path(tmp_name)
+            pbuf = aligned_buffer(block_size)
+            try:
+                populate_file(path, cells, block_size, pbuf)
+                for pattern in ("linear", "random"):
+                    offsets = make_offsets(cells, block_size, pattern)
+                    for op, write in (("write", True), ("read", False)):
+                        for conc in args.concurrency_levels:
+                            eff_conc = min(conc, cells)
+                            session_cm = make_session(library, path, direct)
+                            async with session_cm as session:
+                                lats, wall = await run(
+                                    session, eff_conc, args.ops,
+                                    block_size, offsets, write,
+                                    args.warmup_ops,
+                                )
+                            mib_s = (
+                                (args.ops * block_size / (1024 * 1024))
+                                / wall
+                            )
+                            log.info(
+                                "%s/%s %s bs=%d %s %s x%d: %.0f ops/s "
+                                "%.1f MiB/s (%d samples)",
+                                library, backend_label, mode_label,
+                                block_size, pattern, op, eff_conc,
+                                args.ops / wall, mib_s, len(lats),
+                            )
+                            for lat in lats:
+                                row = (
+                                    library, backend_label, mode_label,
+                                    block_size, pattern, op, eff_conc,
+                                    f"{lat * 1e6:.1f}", f"{wall:.4f}",
+                                    args.ops, f"{mib_s:.3f}",
+                                )
+                                print(
+                                    "\t".join(str(v) for v in row),
+                                    file=out_fp, flush=True,
+                                )
+            finally:
+                path.unlink(missing_ok=True)
+
+
+def parse_args():
     parser = argparse.ArgumentParser(
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument("--file-size", type=int, default=8 * 1024 * 1024)
-    parser.add_argument("--block-size", type=int, default=4096)
-    parser.add_argument("--concurrency", type=int, default=8)
-    parser.add_argument("--rounds", type=int, default=1)
+    parser.add_argument(
+        "--library", required=True,
+        choices=("stdlib", "aiofile", "aiofiles", "aiomisc"),
+    )
+    parser.add_argument(
+        "--backend", default=None, choices=tuple(CAIO_BACKENDS),
+        help="caio backend -- aiofile only",
+    )
+    parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument("--file-size", type=int, default=16 * 1024 * 1024)
+    parser.add_argument(
+        "--block-sizes", type=int, nargs="+", default=[4096],
+        metavar="BYTES", help="one or more block sizes (default: 4096)",
+    )
+    parser.add_argument(
+        "--concurrency-levels", type=int, nargs="+", default=[1, 8],
+        metavar="N", help="one or more concurrency levels (default: 1 8)",
+    )
+    parser.add_argument(
+        "--ops", type=int, default=1000,
+        help="timed ops per cell (default: 1000)",
+    )
+    parser.add_argument(
+        "--warmup-ops", type=int, default=100,
+        help="untimed ops before each cell (default: 100)",
+    )
     parser.add_argument("--dir", type=Path, default=Path("./bench-data"))
-    parser.add_argument(
-        "--max-requests", type=int, default=None,
-        help="caio context max_requests (default: backend default)",
-    )
-    parser.add_argument(
-        "--deferred", action="store_true",
-        help="submit aiofile/caio operations in deferred (batched) mode",
-    )
     args = parser.parse_args()
 
+    if args.library == "aiofile" and not args.backend:
+        parser.error("--backend is required when --library aiofile")
+    if args.library != "aiofile" and args.backend:
+        parser.error("--backend only applies to --library aiofile")
+    if min(args.file_size, args.ops) <= 0 or args.warmup_ops < 0:
+        parser.error("--file-size/--ops must be positive, --warmup-ops >= 0")
+    for bs in args.block_sizes:
+        if bs <= 0:
+            parser.error("--block-sizes entries must be positive")
+        if args.file_size % bs:
+            parser.error(f"--file-size must be a multiple of {bs}")
+    for conc in args.concurrency_levels:
+        if conc <= 0:
+            parser.error("--concurrency-levels entries must be positive")
+
+    return args
+
+
+async def main_async():
+    args = parse_args()
     logging.basicConfig(
-        stream=sys.stderr, level=logging.INFO, format="%(message)s",
+        stream=sys.stderr, level=logging.INFO,
+        format="%(asctime)s %(message)s",
     )
+    args.dir.mkdir(exist_ok=True, parents=True)
+    args.out.parent.mkdir(exist_ok=True, parents=True)
 
-    if min(args.file_size, args.block_size, args.concurrency, args.rounds) <= 0:
-        parser.error(
-            "--file-size/--block-size/--concurrency/--rounds must be positive",
-        )
-    if args.file_size % args.block_size:
-        parser.error("--file-size must be a multiple of --block-size")
-    if args.block_size % DIRECT_ALIGN:
-        parser.error(f"--block-size must be a multiple of {DIRECT_ALIGN}")
+    with args.out.open("w") as out_fp:
+        print("\t".join(COLUMNS), file=out_fp)
+        await sweep(args.library, args.backend, args, out_fp)
 
-    args.dir.mkdir(exist_ok=True)
 
-    block_count = args.file_size // args.block_size
-    concurrency = min(args.concurrency, block_count)
-    if concurrency != args.concurrency:
-        log.info(
-            "concurrency capped %d -> %d (only %d blocks)",
-            args.concurrency, concurrency, block_count,
-        )
-
-    linear = list(range(0, args.file_size, args.block_size))
-    random_order = linear[:]
-    random.Random(0).shuffle(random_order)
-    patterns = {"linear": linear, "random": random_order}
-
-    has_direct = hasattr(os, "O_DIRECT")
-    if not has_direct:
-        log.info("O_DIRECT unavailable (not Linux?), skipping direct cases")
-
-    backend_contexts = {
-        module.__name__.rsplit(".", 1)[-1].removesuffix("_asyncio"):
-            module.AsyncioContext(
-                max_requests=args.max_requests, deferred=args.deferred,
-            )
-        for module in caio.variants_asyncio
-    }
-    log.info(
-        "env: python=%s system=%s release=%s caio_backends=%s "
-        "max_requests=%s deferred=%s",
-        platform.python_version(), platform.system(), platform.release(),
-        ",".join(backend_contexts) or "none", args.max_requests, args.deferred,
-    )
-
-    participants = build_participants(args, backend_contexts)
-
-    columns = (
-        "library", "backend", "mode", "pattern", "op", "concurrency",
-        "round", "file_size", "block_size", "seconds", "mib_per_sec",
-    )
-    print("\t".join(columns), flush=True)
-
-    try:
-        for entry in participants:
-            library, backend_name, make_session, direct_capable = entry
-            direct_ok = direct_capable and has_direct
-            modes = [False, True] if direct_ok else [False]
-            for direct in modes:
-                mode_label = "direct" if direct else "buffered"
-                for pattern_name, offsets in patterns.items():
-                    for op, write in (("write", True), ("read", False)):
-                        for pass_concurrency in sorted({1, concurrency}):
-                            for round_index in range(args.rounds):
-                                fd, tmp_name = tempfile.mkstemp(
-                                    dir=args.dir, prefix="bench-",
-                                )
-                                os.ftruncate(fd, args.file_size)
-                                os.close(fd)
-                                path = Path(tmp_name)
-                                try:
-                                    if not write:
-                                        await asyncio.to_thread(
-                                            populate_file, path,
-                                            args.file_size, args.block_size,
-                                        )
-                                    session_cm = make_session(path, direct)
-                                    seconds = await run_pass(
-                                        session_cm, offsets, args.block_size,
-                                        write, pass_concurrency,
-                                    )
-                                finally:
-                                    path.unlink(missing_ok=True)
-
-                                mib_per_sec = (
-                                    (args.file_size / (1024 * 1024)) / seconds
-                                )
-                                log.info(
-                                    "%s/%s %s %s %s x%d round %d: %.3fs",
-                                    library, backend_name, mode_label,
-                                    pattern_name, op, pass_concurrency,
-                                    round_index, seconds,
-                                )
-                                row = (
-                                    library, backend_name, mode_label,
-                                    pattern_name, op, pass_concurrency,
-                                    round_index, args.file_size,
-                                    args.block_size, seconds, mib_per_sec,
-                                )
-                                print(
-                                    "\t".join(str(v) for v in row),
-                                    flush=True,
-                                )
-    finally:
-        for ctx in backend_contexts.values():
-            ctx.close()
+def main():
+    asyncio.run(main_async())
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()

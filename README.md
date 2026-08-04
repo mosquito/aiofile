@@ -478,21 +478,53 @@ asyncio.run(main())
 
 ## Benchmark
 
-![aiofile benchmark: throughput by library, backend and concurrency](https://media.githubusercontent.com/media/mosquito/aiofile/master/benchmark/results/aiofile-bench-report.png)
+stdlib, `aiofile` (once per `caio` backend, each in its own subprocess), `aiofiles`,
+`aiomisc.io` — linear/random block order, read/write, buffered/`O_DIRECT`,
+sequential/concurrent, fixed op count per cell (never a partial/cancelled
+measurement). Tool, methodology and raw data: [`benchmark/`](benchmark/); a
+third report at 4096B lives in `benchmark/results/`.
 
-stdlib, `aiofile` (every `caio` backend), `aiofiles`, `aiomisc.io` — linear/random
-block order, read/write, buffered/`O_DIRECT`, sequential/concurrent, content-verified.
-Tool, methodology and raw data: [`benchmark/`](benchmark/).
+![aiofile benchmark, 65536B blocks](https://media.githubusercontent.com/media/mosquito/aiofile/master/benchmark/results/aiofile-bench-report-bs65536.png)
 
-Linear write, MiB/s (one Linux/ext4 run, mean of 5 rounds):
+Linear write, one Linux/ext4 run, 65536B blocks, 2000 ops/cell, per-op
+latency in ms (p50 / p95, ±stdev):
 
-| participant | x1 | x8 | speedup |
-|---|--:|--:|--:|
-| stdlib (buffered) | 38 | 93 | 2.5x |
-| stdlib (O_DIRECT) | 22 | 41 | 1.9x |
-| aiofile (linux_uring) | 55 | 466 | 8.5x |
-| aiofile (linux_aio) | 637 | 856 | 1.3x |
-| aiofile (thread_aio) | 24 | 39 | 1.6x |
-| aiofile (python_aio) | 29 | 74 | 2.6x |
-| aiofiles | 24 | 22 | 0.9x |
-| aiomisc | 23 | 21 | 0.9x |
+| participant           | x1                     | x8                     |
+|-----------------------|------------------------|------------------------|
+| stdlib (buffered)     | 0.081 / 0.128 (±0.030) | 0.167 / 0.298 (±0.157) |
+| stdlib (O_DIRECT)     | 0.148 / 0.398 (±0.097) | 0.266 / 0.650 (±0.192) |
+| aiofile (linux_uring) | 0.050 / 0.108 (±0.022) | 0.040 / 0.248 (±0.293) |
+| aiofile (linux_aio)   | 0.009 / 0.024 (±0.020) | 0.040 / 0.089 (±0.020) |
+| aiofile (thread_aio)  | 0.150 / 0.461 (±0.128) | 0.664 / 2.930 (±0.943) |
+| aiofile (python_aio)  | 0.109 / 0.173 (±0.042) | 0.189 / 0.314 (±0.072) |
+| aiofiles              | 0.155 / 0.257 (±0.175) | 1.166 / 2.238 (±0.570) |
+| aiomisc               | 0.156 / 0.256 (±0.051) | 1.118 / 1.607 (±1.750) |
+
+`linux_aio` posts the lowest, tightest per-op latency at both concurrency
+levels here -- `io_submit()` is a lean, purpose-built syscall, while
+`linux_uring`'s ring/SQPOLL machinery is built to amortize *over batched
+submissions*, not to minimize one op's latency, so it only pulls ahead
+once there's a batch to amortize over. `aiofiles`/`aiomisc` latency
+*grows* at x8 (one seek cursor, serialized by a lock) instead of
+shrinking like the positional-I/O libraries.
+
+![aiofile benchmark, 256B blocks](https://media.githubusercontent.com/media/mosquito/aiofile/master/benchmark/results/aiofile-bench-report-bs256.png)
+
+Linear write, 256B blocks, 2000 ops/cell, per-op latency in ms (p50 / p95, ±stdev):
+
+| participant           | x1                            | x8                     |
+|-----------------------|-------------------------------|------------------------|
+| stdlib (buffered)     | 0.066 / 0.104 (±0.017)        | 0.152 / 0.299 (±0.125) |
+| stdlib (O_DIRECT)     | n/a (256B isn't 4096-aligned) | n/a                    |
+| aiofile (linux_uring) | 0.086 / 0.159 (±0.043)        | 0.043 / 0.070 (±0.021) |
+| aiofile (linux_aio)   | 0.005 / 0.008 (±0.004)        | 0.017 / 0.027 (±0.008) |
+| aiofile (thread_aio)  | 0.128 / 0.290 (±0.090)        | 0.464 / 1.503 (±0.470) |
+| aiofile (python_aio)  | 0.113 / 0.201 (±0.037)        | 0.179 / 0.354 (±0.124) |
+| aiofiles              | 0.136 / 0.169 (±0.030)        | 1.002 / 1.516 (±0.372) |
+| aiomisc               | 0.144 / 0.223 (±0.040)        | 1.046 / 1.999 (±0.415) |
+
+Same shape at a tiny block size: `linux_aio` still has the lowest latency
+by a wide margin (sub-10μs median at x1), `linux_uring` still needs
+concurrency to close the gap (and still doesn't fully close it), and the
+lock-serialized libraries still get *worse*, not better, under
+concurrency.
