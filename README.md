@@ -475,3 +475,11 @@ async def main():
 
 asyncio.run(main())
 ```
+
+## Benchmark
+
+![aiofile benchmark: throughput by library, backend and concurrency](https://media.githubusercontent.com/media/mosquito/aiofile/master/benchmark/results/aiofile-bench-report.png)
+
+stdlib, `aiofile` (every `caio` backend), `aiofiles`, `aiomisc.io` — linear/random
+block order, read/write, buffered/`O_DIRECT`, sequential/concurrent, content-verified.
+Tool, methodology and raw data: [`benchmark/`](benchmark/).
