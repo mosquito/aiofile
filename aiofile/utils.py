@@ -272,7 +272,6 @@ class TextFileWrapper(FileIOWrapperBase):
         self.encoding = self.file.encoding
 
     async def __read(self, length: int) -> str:
-        chunk_size = 0
         offset = self._offset
         chunk = ""
         while length < 0 or length > len(chunk):
@@ -286,9 +285,10 @@ class TextFileWrapper(FileIOWrapperBase):
             chunk += part
             offset += part_offset
 
-        if chunk_size > length > 0:
+        if 0 < length < len(chunk):
+            extra = chunk[length:]
             chunk = chunk[:length]
-            offset = length
+            offset -= len(extra.encode(self.encoding))
 
         self._offset = offset
         return chunk

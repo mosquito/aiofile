@@ -462,6 +462,21 @@ async def test_text_io_wrapper(aio_file_maker, temp_file):
         assert fp.tell() == 4
 
 
+async def test_text_io_wrapper_read_length_multibyte(aio_file_maker, temp_file):
+    data = "世界人権宣言前文人類社会のすべての構成員の固有の尊厳と平等で譲ることのできない権利とを承認する"
+
+    async with aio_file_maker(temp_file, "w+") as afp:
+        await afp.write(data)
+
+    collected = ""
+    async with TextFileWrapper(aio_file_maker(temp_file, "r")) as fp:
+        while chunk := await fp.read(12):
+            assert len(chunk) <= 12
+            collected += chunk
+
+    assert collected == data
+
+
 async def test_binary_io_wrapper(aio_file_maker, temp_file):
     async with aio_file_maker(temp_file, "wb+") as afp:
         data = b"\x01\x02\x03"
