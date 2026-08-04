@@ -190,6 +190,10 @@ class FileIOWrapperBase(ABC):
     def tell(self) -> int:
         return self._offset
 
+    @property
+    def closed(self) -> bool:
+        return self.file.closed
+
     async def flush(self, sync_metadata: bool = False) -> None:
         if sync_metadata:
             await self.file.fsync()

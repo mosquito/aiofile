@@ -169,6 +169,10 @@ class AIOFile:
     def encoding(self) -> str:
         return self._encoding
 
+    @property
+    def closed(self) -> bool:
+        return self._file_obj is None or self._file_obj.closed
+
     async def open(self) -> Optional[int]:
         if self._file_obj is not None:
             if self._file_obj.closed:

@@ -242,6 +242,24 @@ async def test_double_close(aio_file_maker, temp_file):
     await file.close()
 
 
+async def test_closed_attribute(aio_file_maker, temp_file):
+    file = aio_file_maker(temp_file, "w")
+    assert file.closed
+    await file.open()
+    assert not file.closed
+    await file.close()
+    assert file.closed
+
+
+async def test_closed_attribute_wrapper(async_open, temp_file):
+    fp = async_open(temp_file, "w")
+    assert fp.closed
+    await fp
+    assert not fp.closed
+    await fp.close()
+    assert fp.closed
+
+
 async def test_parallel_open(aio_file_maker, temp_file):
     file = aio_file_maker(temp_file, "r")
     try:
