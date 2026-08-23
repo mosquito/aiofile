@@ -1,3 +1,4 @@
+import asyncio
 from functools import partial
 from types import ModuleType
 from typing import List, Union
@@ -46,12 +47,14 @@ IMPLEMENTATION_NAMES: List[str] = list(
 
 
 @pytest.fixture(params=IMPLEMENTATIONS, ids=IMPLEMENTATION_NAMES)
-async def aio_context(request, event_loop):
+async def aio_context(request):
     if request.param is None:
         yield None
         return
 
-    async with request.param.AsyncioContext(loop=event_loop) as context:
+    async with request.param.AsyncioContext(
+        loop=asyncio.get_event_loop()
+    ) as context:
         yield context
 
 

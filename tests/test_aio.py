@@ -387,9 +387,9 @@ async def test_write_read_nothing(aio_file_maker, temp_file, mode, data):
         assert await afp.read() == data
 
 
-async def test_partial_writes(temp_file, event_loop):
+async def test_partial_writes(temp_file):
     ctx = Mock(caio.AbstractContext)
-    ctx.loop = event_loop
+    ctx.loop = asyncio.get_running_loop()
     ctx.fdsync = CoroutineMock(return_value=None)
     ctx.write = CoroutineMock(side_effect=asyncio.InvalidStateError)
 
@@ -415,9 +415,9 @@ async def test_partial_writes(temp_file, event_loop):
         ]
 
 
-async def test_write_returned_negative(temp_file, event_loop):
+async def test_write_returned_negative(temp_file):
     ctx = Mock(caio.AbstractContext)
-    ctx.loop = event_loop
+    ctx.loop = asyncio.get_running_loop()
     ctx.fdsync = CoroutineMock(return_value=None)
     ctx.write = CoroutineMock(side_effect=asyncio.InvalidStateError)
 
@@ -437,9 +437,9 @@ async def test_write_returned_negative(temp_file, event_loop):
         assert raises.value.filename == temp_file
 
 
-async def test_write_returned_zero(temp_file, event_loop):
+async def test_write_returned_zero(temp_file):
     ctx = Mock(caio.AbstractContext)
-    ctx.loop = event_loop
+    ctx.loop = asyncio.get_running_loop()
     ctx.fdsync = CoroutineMock(return_value=None)
     ctx.write = CoroutineMock(side_effect=asyncio.InvalidStateError)
 
