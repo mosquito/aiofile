@@ -163,12 +163,34 @@ class FileIOWrapperBase(ABC):
         self._offset = offset
         self._lock = asyncio.Lock()
         self.file = afp
-
-        if self.file.mode.appending:
+        self._append_offset_initialized = not self.file.mode.appending
+        if self.file.mode.appending and self.file._file_context is None:
             try:
                 self._offset = os.stat(afp.name).st_size
             except FileNotFoundError:
                 self._offset = 0
+            self._append_offset_initialized = True
+
+    async def _initialize_append_offset(self) -> None:
+        if not self._append_offset_initialized:
+            self._offset = (await self.file.stat()).st_size
+            self._append_offset_initialized = True
+
+    async def _open(self) -> "FileIOWrapperBase":
+        opened = await self.file.open()
+        try:
+            await self._initialize_append_offset()
+        except BaseException as error:
+            if opened is not None:
+                await self.file._complete_cleanup(
+                    self.file.close(),
+                    cancellation=(
+                        error if isinstance(error, asyncio.CancelledError)
+                        else None
+                    ),
+                )
+            raise
+        return self
 
     @abstractmethod
     async def read(self, length: int = -1) -> Any:
@@ -186,6 +208,7 @@ class FileIOWrapperBase(ABC):
 
     def seek(self, offset: int) -> None:
         self._offset = offset
+        self._append_offset_initialized = True
 
     def tell(self) -> int:
         return self._offset
@@ -204,12 +227,10 @@ class FileIOWrapperBase(ABC):
         await self.file.close()
 
     def __await__(self) -> Generator[None, None, "FileIOWrapperBase"]:
-        yield from self.file.__await__()
-        return self
+        return (yield from self._open().__await__())
 
     async def __aenter__(self) -> "FileIOWrapperBase":
-        await self.file.open()
-        return self
+        return await self._open()
 
     async def __aexit__(self, *_: Any) -> None:
         await self.close()
@@ -228,6 +249,7 @@ class BinaryFileWrapper(FileIOWrapperBase):
         super().__init__(afp)
 
     async def __read(self, length: int) -> bytes:
+        await self._initialize_append_offset()
         data = await self.file.read_bytes(length, self._offset)
         self._offset += len(data)
         return data
@@ -238,6 +260,7 @@ class BinaryFileWrapper(FileIOWrapperBase):
 
     async def write(self, data: bytes) -> int:
         async with self._lock:
+            await self._initialize_append_offset()
             operation = self.file.write_bytes(data, self._offset)
             self._offset += len(data)
         await operation
@@ -245,6 +268,7 @@ class BinaryFileWrapper(FileIOWrapperBase):
 
     async def readline(self, size: int = -1, newline: bytes = b"\n") -> bytes:
         async with self._lock:
+            await self._initialize_append_offset()
             offset = self._offset
             with io.BytesIO() as fp:
                 while True:
@@ -276,6 +300,7 @@ class TextFileWrapper(FileIOWrapperBase):
         self.encoding = self.file.encoding
 
     async def __read(self, length: int) -> str:
+        await self._initialize_append_offset()
         offset = self._offset
         chunk = ""
         while length < 0 or length > len(chunk):
@@ -303,6 +328,7 @@ class TextFileWrapper(FileIOWrapperBase):
 
     async def write(self, data: str) -> int:
         async with self._lock:
+            await self._initialize_append_offset()
             data_bytes = data.encode(self.encoding)
             operation = self.file.write_bytes(data_bytes, self._offset)
             self._offset += len(data_bytes)
@@ -312,6 +338,7 @@ class TextFileWrapper(FileIOWrapperBase):
 
     async def readline(self, size: int = -1, newline: str = "\n") -> str:
         async with self._lock:
+            await self._initialize_append_offset()
             offset = self._offset
             with io.StringIO() as fp:
                 while True:
@@ -367,9 +394,21 @@ class FileIOCloner(Generic[T]):
         async with self._lock:
             if self.cloned_afp is not None:
                 return self.cloned_afp
-            self.cloned_afp = self.source_afp.__class__(
+            cloned = self.source_afp.__class__(
                 await self.source_afp.file.clone(),
             )
+            try:
+                await cloned._initialize_append_offset()
+            except BaseException as error:
+                await cloned.file._complete_cleanup(
+                    cloned.close(),
+                    cancellation=(
+                        error if isinstance(error, asyncio.CancelledError)
+                        else None
+                    ),
+                )
+                raise
+            self.cloned_afp = cloned
         return self.cloned_afp
 
     def __await__(self) -> Generator[Any, None, T]:

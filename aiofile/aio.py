@@ -1,13 +1,15 @@
 import asyncio
+import errno
 import os
+import stat
 from collections import namedtuple
 from concurrent.futures import Executor
 from functools import partial, wraps
 from os import strerror
 from pathlib import Path
 from typing import (
-    Any, Awaitable, BinaryIO, Callable, Dict, Generator, Optional, TextIO,
-    TypeVar, Union, cast,
+    Any, Awaitable, BinaryIO, Callable, Dict, Generator, Optional, Protocol,
+    TextIO, TypeVar, Union, cast, runtime_checkable,
 )
 from weakref import finalize
 
@@ -113,6 +115,24 @@ def parse_mode(mode: str) -> FileMode:    # noqa: C901
     )
 
 
+@runtime_checkable
+class _FileOperations(Protocol):
+    FILE_OPERATIONS_VERSION: int
+    OPERATION_CLASS: Any
+
+    async def submit(self, op: Any) -> Any:
+        ...
+
+    async def open(self, path: str, flags: int, mode: int = 0o666) -> int:
+        ...
+
+    async def stat(self, path: Union[str, int]) -> os.stat_result:
+        ...
+
+    async def truncate(self, fd: int, length: int = 0) -> None:
+        ...
+
+
 class AIOFile:
     _file_obj: Optional[FileIOType]
     _file_obj_owner: bool
@@ -129,6 +149,21 @@ class AIOFile:
     ):
         self.__context = context or get_default_context()
         self.__open_result = None
+        self._file_context = (
+            self.__context
+            if isinstance(self.__context, _FileOperations)
+            else None
+        )
+        if (
+            self._file_context is not None
+            and self._file_context.FILE_OPERATIONS_VERSION != 1
+        ):
+            raise ValueError("Unsupported native file operations contract")
+        self._native_fd: Optional[int] = None
+        self._native_ready = False
+        self._native_finalizer: Optional[finalize] = None
+        self._native_closed = False
+        self._native_lock = asyncio.Lock()
 
         self._fname = str(filename)
         self._open_mode = mode
@@ -171,9 +206,57 @@ class AIOFile:
 
     @property
     def closed(self) -> bool:
+        if self._file_context is not None and self._file_obj is None:
+            return self._native_fd is None
         return self._file_obj is None or self._file_obj.closed
 
+    async def _open_native(self) -> Optional[int]:
+        context = self._file_context
+        if context is None:
+            raise asyncio.InvalidStateError("Native file context missing")
+        async with self._native_lock:
+            if self._native_closed:
+                raise asyncio.InvalidStateError("AIOFile closed")
+            if self._native_fd is not None:
+                if self._native_ready:
+                    return None
+                # A failed open whose cleanup close was rejected still owns
+                # its descriptor: retry that cleanup before opening again.
+                await self._complete_cleanup(
+                    self._cleanup_failed_open(self._native_fd),
+                )
+            mode = self._open_mode
+            if (
+                any(char not in "axrwbt+" for char in mode)
+                or sum(mode.count(char) for char in "axrw") != 1
+                or mode.count("b") + mode.count("t") > 1
+            ):
+                raise ValueError("invalid mode: %r" % mode)
+            fd = await context.open(self._fname, self.mode.flags | os.O_CLOEXEC)
+            self._native_fd = fd
+            try:
+                self._native_finalizer = finalize(self, os.close, fd)
+                result = await context.stat(fd)
+                if stat.S_ISDIR(result.st_mode):
+                    raise IsADirectoryError(
+                        errno.EISDIR, strerror(errno.EISDIR), self._fname,
+                    )
+            except BaseException as error:
+                await self._complete_cleanup(
+                    self._cleanup_failed_open(fd),
+                    cancellation=(
+                        error if isinstance(error, asyncio.CancelledError)
+                        else None
+                    ),
+                )
+                raise
+            self._native_ready = True
+            return fd
+
     async def open(self) -> Optional[int]:
+        if self._file_context is not None and self._file_obj is None:
+            return await self._open_native()
+
         if self._file_obj is not None:
             if self._file_obj.closed:
                 raise asyncio.InvalidStateError("AIOFile closed")
@@ -201,7 +284,69 @@ class AIOFile:
             self._clones += 1
             return self
 
+    async def _cleanup_failed_open(self, fd: int) -> None:
+        await self._close_native_fd(fd)
+        self._native_closed = False
+
+    async def _complete_cleanup(
+        self, operation: Awaitable[None], *,
+        cancellation: asyncio.CancelledError | None = None,
+    ) -> None:
+        try:
+            cleanup = asyncio.ensure_future(operation, loop=self.loop)
+            while not cleanup.done():
+                try:
+                    await asyncio.shield(cleanup)
+                except asyncio.CancelledError as exc:
+                    if cancellation is None:
+                        cancellation = exc
+            cleanup.result()
+        except BaseException as error:
+            if cancellation is not None:
+                raise cancellation from error
+            raise
+        if cancellation is not None:
+            raise cancellation
+
+    def _release_native_ownership(self) -> None:
+        finalizer = self._native_finalizer
+        self._native_finalizer = None
+        self._native_fd = None
+        self._native_ready = False
+        self._native_closed = True
+        if finalizer is not None:
+            finalizer.detach()
+
+    async def _close_native_fd(self, fd: int) -> None:
+        context = self._file_context
+        if context is None:
+            raise asyncio.InvalidStateError("Native file context missing")
+        try:
+            if self.mode.writable:
+                await self.__context.fdsync(fd)
+        finally:
+            # Own the operation so its fd_closed disposition stays readable
+            # even if constructing CloseError or bookkeeping fails.
+            op = context.OPERATION_CLASS.close(fd)
+            try:
+                await context.submit(op)
+            finally:
+                if op.fd_closed is not False:
+                    self._release_native_ownership()
+
     async def close(self) -> None:
+        if self._file_context is not None and self._file_obj is None:
+            async with self._native_lock:
+                if self._native_fd is None:
+                    return
+                async with self._clone_lock:
+                    if self._clones > 0:
+                        self._clones -= 1
+                        return
+                await self._complete_cleanup(
+                    self._close_native_fd(self._native_fd),
+                )
+            return
         if (
             self._file_obj is None
             or not self._file_obj_owner
@@ -220,6 +365,12 @@ class AIOFile:
         await self._run_in_thread(self._file_obj.close)
 
     def fileno(self) -> int:
+        if self._native_fd is not None:
+            if not self._native_ready:
+                raise asyncio.InvalidStateError(
+                    "Native file open did not complete",
+                )
+            return self._native_fd
         if self._file_obj is None:
             raise asyncio.InvalidStateError("AIOFile closed")
         return self._file_obj.fileno()
@@ -244,14 +395,15 @@ class AIOFile:
             raise ValueError("Unsupported value %d for size" % size)
 
         if size == -1:
-            size = (
-                await self._run_in_thread(
-                    os.stat,
-                    self.fileno(),
-                )
-            ).st_size
+            size = (await self.stat()).st_size
 
         return await self.__context.read(size, self.fileno(), offset)
+
+    async def stat(self) -> os.stat_result:
+        fd = self.fileno()
+        if self._file_context is not None:
+            return await self._file_context.stat(fd)
+        return await self._run_in_thread(os.stat, fd)
 
     async def write(self, data: Union[str, bytes], offset: int = 0) -> int:
         if self.mode.binary:
@@ -315,7 +467,16 @@ class AIOFile:
     async def fdsync(self) -> None:
         return await self.__context.fdsync(self.fileno())
 
+    async def _truncate_native(self, length: int) -> None:
+        context = self._file_context
+        if context is None:
+            raise asyncio.InvalidStateError("Native file context missing")
+        await context.truncate(self.fileno(), length)
+
     def truncate(self, length: int = 0) -> Awaitable[None]:
+        if self._file_context is not None:
+            self.fileno()
+            return self._truncate_native(length)
         return self._run_in_thread(
             os.ftruncate, self.fileno(), length,
         )
