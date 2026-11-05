@@ -17,13 +17,46 @@ Real asynchronous file operations with asyncio support.
 * `AIOFile` has no internal file pointer. Pass `offset` and `chunk_size` to each operation,
   or use the `Reader`/`Writer` helpers. For a file-like interface, use `async_open`.
 
+## Native file lifecycle
+
+With caio's io_uring backend, `AIOFile` uses native `io_uring` operations for
+opening and closing owned files, reading their metadata (`await file.stat()`),
+and truncating them (`await file.truncate(size)`), as well as data reads,
+writes, and synchronization. caio selects this backend by default where io_uring
+is available, so `AIOFile(path)` and `async_open(path)` need no explicit context;
+passing a `caio.linux_uring_asyncio.AsyncioContext` selects it explicitly.
+`async_open` initializes its append position asynchronously in this mode. Other
+backends retain their existing executor-based lifecycle.
+
+Native files own a raw descriptor. `AIOFile.from_fp` still borrows its descriptor
+and does not close the caller's file object. Close waits for descriptor cleanup
+before propagating cancellation. If cleanup also fails, cancellation is propagated
+with the cleanup failure retained as its exception cause. An interrupted open
+releases any descriptor it acquired. Cancellation is not rollback: a submitted filesystem operation may
+complete before cancellation is reported. Implicit garbage collection uses a
+synchronous descriptor close as a last-resort cleanup; use the asynchronous
+context manager or `await file.close()` for the native lifecycle.
+
+`AIOFile` submits its own `Operation.close(fd)` and reads the operation's
+`fd_closed` attribute. The descriptor disposition remains available even if constructing `CloseError`
+or final bookkeeping raises `MemoryError`. Under the version-1 native file
+contract, a known unsubmitted close has `fd_closed=False` and leaves ownership
+intact. `True` confirms a successful close completion; `None` means release
+cannot be proven. For `True` or `None`, `AIOFile` relinquishes ownership before
+propagating any exception. It never retries a potentially reused numeric
+descriptor or closes it again during garbage collection.
+
+The native context also provides `stat`, `mkdir`, `unlink`, `rmdir`, `rename`,
+`link`, and `symlink`. These APIs require kernel support for their corresponding
+`io_uring` operations and propagate `OSError` rather than falling back to an
+executor. Native truncate requires Linux 6.9 or newer.
+
 ## Limitations
 
-* The Linux native AIO and io_uring backends cannot open special files.
-  Asynchronous operations against special filesystems such as `/proc/` or `/sys/` are not
-  supported by the kernel — this is neither an aiofile nor a caio issue.
-  In such cases, switch to a thread-based implementation
-  (see the [Troubleshooting](#troubleshooting) section).
+* Use regular disk-backed files for predictable native file I/O. Special files
+  and filesystems may not support a particular native backend or operation;
+  unsupported operations raise an error. Select a thread-based context explicitly
+  when that is appropriate (see [Troubleshooting](#troubleshooting)).
 
 ## Code examples
 
