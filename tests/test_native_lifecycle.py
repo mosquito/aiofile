@@ -9,6 +9,7 @@ import asyncio
 import builtins
 import errno
 import gc
+import importlib
 import os
 import traceback
 import weakref
@@ -27,20 +28,24 @@ from aiofile.aio import get_default_context
 
 @pytest.fixture
 def native():
+    # caio sets caio.linux_uring_asyncio to None when the backend is
+    # missing, so import the submodule itself to get an ImportError.
     try:
-        from caio import linux_uring_asyncio
+        linux_uring_asyncio = importlib.import_module(
+            "caio.linux_uring_asyncio",
+        )
     except ImportError as exc:
         pytest.skip(f"caio io_uring backend is unavailable: {exc}")
     if getattr(linux_uring_asyncio.AsyncioContext,
                "FILE_OPERATIONS_VERSION", None) != 1:
         pytest.skip("caio lacks native io_uring file operations")
-    from caio.abstract import CloseError
     return SimpleNamespace(
         module=linux_uring_asyncio,
         AsyncioContext=linux_uring_asyncio.AsyncioContext,
         Operation=linux_uring_asyncio.Operation,
         Context=linux_uring_asyncio.Context,
-        CloseError=CloseError,
+        # getattr: older caio releases and their stubs lack CloseError.
+        CloseError=getattr(linux_uring_asyncio, "CloseError"),
     )
 
 
